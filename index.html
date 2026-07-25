@@ -5,102 +5,204 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Tanla</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;0,9..144,700;0,9..144,900;1,9..144,600&family=Inter:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg: var(--tg-theme-bg-color, #14110f);
-    --bg-secondary: var(--tg-theme-secondary-bg-color, #1d1916);
-    --text: var(--tg-theme-text-color, #f3ede4);
-    --hint: var(--tg-theme-hint-color, #9a8f7f);
-    --accent: #e08a3e;
-    --accent-soft: #e08a3e26;
-    --line: #ffffff17;
-    --radius: 14px;
+    --bg: #17100a;
+    --bg-raised: #211609;
+    --bg-raised-2: #2a1c0d;
+    --ink: #f6ead8;
+    --muted: #b3987a;
+    --muted-dim: #8a7360;
+    --accent: #d1552b;
+    --accent-ink: #2a1006;
+    --gold: #e3a83b;
+    --olive: #7c8a5e;
+    --line: #f6ead81f;
+    --line-strong: #f6ead833;
+    --radius: 16px;
+    --serif: "Fraunces", Georgia, serif;
+    --sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   }
-  *{box-sizing:border-box;}
+  *{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html{ background:var(--bg); }
   body{
-    margin:0; background:var(--bg); color:var(--text);
-    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:var(--sans);
     -webkit-font-smoothing:antialiased;
-    padding-bottom:32px;
+    padding-bottom:44px;
+    background-image:
+      radial-gradient(ellipse 900px 500px at 15% -8%, #d1552b14, transparent 60%),
+      radial-gradient(ellipse 700px 500px at 110% 10%, #e3a83b10, transparent 55%);
+    background-attachment:fixed;
   }
+
+  /* ===== HEADER ===== */
   header.top{
-    padding:20px 16px 14px; position:sticky; top:0; z-index:5;
-    background:var(--bg); border-bottom:1px solid var(--line);
+    padding:22px 18px 16px; position:sticky; top:0; z-index:5;
+    background:linear-gradient(180deg, var(--bg) 78%, transparent);
+    backdrop-filter:blur(6px);
   }
-  header.top .eyebrow{ font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--accent); font-weight:700;}
-  header.top h1{ margin:4px 0 2px; font-size:26px; letter-spacing:-0.02em;}
-  header.top p{ margin:0; color:var(--hint); font-size:13px;}
-
-  .crumbs{ display:flex; align-items:center; gap:6px; padding:10px 16px 0; font-size:13px; color:var(--hint);}
-  .crumbs button{ background:none;border:none;color:var(--accent);font-size:13px;padding:4px 0;font-weight:600;}
-
-  main{ padding:12px 16px 40px; }
-
-  .card{
-    background:var(--bg-secondary); border:1px solid var(--line); border-radius:var(--radius);
-    padding:14px 16px; margin-bottom:10px;
+  .brandline{ display:flex; align-items:center; gap:9px; margin-bottom:12px; }
+  .emblem{
+    width:26px; height:26px; border-radius:50%;
+    background:var(--accent); color:var(--accent-ink);
+    display:flex; align-items:center; justify-content:center;
+    font-size:13px; flex:none;
+    box-shadow:0 0 0 3px #d1552b22;
   }
-  .card:active{ transform:scale(.99); }
-
-  .row{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px;}
-  .rest-name{ font-size:16px; font-weight:700; margin:0 0 4px;}
-  .rest-meta{ font-size:12.5px; color:var(--hint); line-height:1.5;}
-  .badge{
-    display:inline-flex; align-items:center; gap:4px; background:var(--accent-soft); color:var(--accent);
-    font-size:12.5px; font-weight:700; padding:4px 9px; border-radius:20px; white-space:nowrap;
+  .eyebrow{
+    font-family:var(--mono); font-size:11px; letter-spacing:.22em; text-transform:uppercase;
+    color:var(--gold); font-weight:600;
   }
+  header.top h1{
+    margin:0 0 4px; font-family:var(--serif); font-style:italic; font-weight:600;
+    font-size:30px; letter-spacing:-0.01em; line-height:1.1;
+  }
+  header.top p{ margin:0; color:var(--muted); font-size:13px; font-family:var(--mono); }
 
-  .chips{ display:flex; gap:8px; overflow-x:auto; padding:2px 0 14px; scrollbar-width:none;}
-  .chips::-webkit-scrollbar{display:none;}
+  .crumbs{
+    display:flex; align-items:center; gap:6px; padding:12px 18px 0; font-size:12.5px;
+    color:var(--muted-dim); font-family:var(--mono); flex-wrap:wrap;
+  }
+  .crumbs button{
+    background:none; border:none; color:var(--gold); font-size:12.5px; padding:3px 0;
+    font-weight:600; font-family:var(--mono); cursor:pointer;
+  }
+  .crumbs .sep{ opacity:.5; }
+
+  main{ padding:14px 18px 40px; max-width:560px; margin:0 auto; }
+
+  /* ===== SECTION LABEL ===== */
+  .section-title{
+    font-family:var(--mono); font-size:11px; text-transform:uppercase; letter-spacing:.16em;
+    color:var(--muted-dim); margin:22px 2px 10px; font-weight:600;
+    display:flex; align-items:center; gap:8px;
+  }
+  .section-title::after{ content:""; flex:1; height:1px; background:var(--line); }
+
+  /* ===== TICKET CARD (signature element) ===== */
+  .ticket{
+    position:relative; background:var(--bg-raised); border:1px solid var(--line);
+    border-radius:var(--radius); padding:16px 18px; margin-bottom:12px;
+    cursor:pointer; transition:transform .12s ease, border-color .12s ease;
+  }
+  .ticket:active{ transform:scale(.985); border-color:var(--line-strong); }
+  .ticket::before, .ticket::after{
+    content:""; position:absolute; top:50%; margin-top:-8px; width:16px; height:16px;
+    border-radius:50%; background:var(--bg); z-index:1;
+  }
+  .ticket::before{ left:-8px; }
+  .ticket::after{ right:-8px; }
+  .ticket .row{ display:flex; justify-content:space-between; align-items:flex-start; gap:12px; }
+  .ticket .row + .row{ margin-top:8px; }
+
+  .t-name{ font-family:var(--serif); font-weight:600; font-size:18px; margin:0 0 4px; letter-spacing:-0.005em; }
+  .t-meta{ font-family:var(--mono); font-size:11.5px; color:var(--muted); line-height:1.6; }
+
+  /* dotted price leader */
+  .leader-row{ display:flex; align-items:baseline; gap:8px; }
+  .leader{ flex:1; border-bottom:2px dotted var(--line-strong); transform:translateY(-3px); min-width:14px; }
+  .t-price{ font-family:var(--mono); font-weight:600; font-size:14px; color:var(--accent); white-space:nowrap; }
+  .item-sub{ font-family:var(--mono); font-size:11.5px; color:var(--muted-dim); margin-top:8px; }
+
+  /* rating / new stamp */
+  .stamp{
+    flex:none; font-family:var(--mono); font-weight:700; font-size:12px;
+    padding:6px 10px; border-radius:8px; white-space:nowrap;
+    background:var(--gold); color:var(--accent-ink); transform:rotate(3deg);
+    box-shadow:0 2px 0 #0000002e;
+  }
+  .stamp.empty-stamp{ background:transparent; border:1.5px dashed var(--olive); color:var(--olive); transform:rotate(-3deg); box-shadow:none; }
+  .stamp.no-rating{ background:transparent; border:1.5px solid var(--line-strong); color:var(--muted-dim); box-shadow:none; transform:rotate(-2deg); }
+
+  /* ===== CHIPS (recipe tabs) ===== */
+  .chips{ display:flex; gap:6px; overflow-x:auto; padding:2px 2px 16px; scrollbar-width:none; }
+  .chips::-webkit-scrollbar{ display:none; }
   .chip{
-    flex:0 0 auto; padding:8px 14px; border-radius:20px; border:1px solid var(--line);
-    color:var(--hint); font-size:13px; font-weight:600; background:var(--bg-secondary); white-space:nowrap;
+    flex:0 0 auto; padding:9px 15px 8px; border-radius:10px 10px 3px 3px;
+    border:1px solid var(--line); border-bottom:2px solid var(--line);
+    color:var(--muted); font-family:var(--mono); font-size:12.5px; font-weight:600;
+    background:var(--bg-raised); white-space:nowrap; cursor:pointer; letter-spacing:.02em;
   }
-  .chip.active{ background:var(--accent); border-color:var(--accent); color:#1a1006; }
+  .chip.active{ background:var(--bg-raised-2); border-color:var(--line-strong); border-bottom:2px solid var(--accent); color:var(--ink); }
 
-  .item-name{ font-size:15px; font-weight:700; margin:0 0 3px;}
-  .item-price{ font-size:14px; color:var(--accent); font-weight:700;}
-  .item-sub{ font-size:12.5px; color:var(--hint); margin-top:4px;}
+  /* ===== ITEM DETAIL HERO ===== */
+  .hero-ticket{
+    position:relative; background:var(--bg-raised); border:1px solid var(--line);
+    border-radius:var(--radius); padding:20px 20px 18px; margin-bottom:12px; overflow:hidden;
+  }
+  .hero-ticket::before{
+    content:""; position:absolute; left:0; right:0; top:0; height:4px;
+    background:repeating-linear-gradient(90deg, var(--accent) 0 10px, transparent 10px 18px);
+  }
+  .hero-price{
+    font-family:var(--serif); font-style:italic; font-weight:700; font-size:26px; color:var(--accent);
+    margin:2px 0 6px;
+  }
+  .hero-meta{ font-family:var(--mono); font-size:12.5px; color:var(--muted); }
 
-  .stars{ font-size:20px; letter-spacing:3px; cursor:pointer; user-select:none;}
-  .stars span{ opacity:.3; }
+  .stars{ font-size:30px; letter-spacing:6px; cursor:pointer; user-select:none; margin-top:14px; }
+  .stars span{ opacity:.25; display:inline-block; transition:transform .12s ease, opacity .12s ease; color:var(--gold); }
   .stars span.on{ opacity:1; }
+  .stars span.bump{ transform:scale(1.35); }
 
-  .section-title{ font-size:12px; text-transform:uppercase; letter-spacing:.1em; color:var(--hint); margin:18px 0 8px; font-weight:700;}
-
-  .review{ border-top:1px solid var(--line); padding:10px 0; }
-  .review:first-child{ border-top:none; }
-  .review .who{ font-weight:700; font-size:13.5px;}
-  .review .who .src{ color:var(--hint); font-weight:400; font-size:11.5px;}
-  .review .when{ color:var(--hint); font-size:11.5px; margin:2px 0 4px;}
-  .review .txt{ font-size:13.5px; line-height:1.45;}
-
+  /* ===== FORM ===== */
+  .card-plain{
+    background:var(--bg-raised); border:1px solid var(--line); border-radius:var(--radius);
+    padding:16px 18px; margin-bottom:12px;
+  }
   textarea, input[type=text]{
     width:100%; background:var(--bg); border:1px solid var(--line); border-radius:10px;
-    color:var(--text); padding:10px 12px; font-size:14px; font-family:inherit; resize:vertical;
+    color:var(--ink); padding:11px 13px; font-size:14px; font-family:var(--sans); resize:vertical;
   }
+  textarea:focus, input[type=text]:focus{ outline:none; border-color:var(--accent); }
+  textarea::placeholder{ color:var(--muted-dim); }
   .btn{
-    background:var(--accent); color:#1a1006; border:none; border-radius:10px; padding:11px 16px;
-    font-weight:700; font-size:14px; width:100%; margin-top:8px;
+    background:var(--accent); color:#fff; border:none; border-radius:10px; padding:12px 16px;
+    font-weight:700; font-size:14px; width:100%; margin-top:10px; cursor:pointer;
+    font-family:var(--sans); letter-spacing:.01em;
   }
+  .btn:active{ transform:scale(.985); }
   .btn:disabled{ opacity:.5; }
-  .btn.ghost{ background:transparent; border:1px solid var(--line); color:var(--text); }
 
-  .empty{ color:var(--hint); font-size:13.5px; text-align:center; padding:30px 10px; }
-  .toast{
-    position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
-    background:var(--accent); color:#1a1006; padding:10px 18px; border-radius:20px;
-    font-size:13.5px; font-weight:700; opacity:0; transition:opacity .25s; pointer-events:none;
+  /* ===== GUESTBOOK / REVIEWS ===== */
+  .guestbook{ background:var(--bg-raised); border:1px solid var(--line); border-radius:var(--radius); padding:4px 18px; }
+  .entry{ border-top:1px dashed var(--line-strong); padding:13px 0; }
+  .entry:first-child{ border-top:none; }
+  .entry .who{ font-weight:700; font-size:13.5px; display:flex; align-items:center; gap:6px; }
+  .entry .src{
+    font-family:var(--mono); font-size:10.5px; color:var(--muted-dim); font-weight:500;
+    border:1px solid var(--line); padding:1px 6px; border-radius:20px;
   }
-  .toast.show{ opacity:1; }
+  .entry .when{ color:var(--muted-dim); font-family:var(--mono); font-size:11px; margin:4px 0 6px; }
+  .entry .txt{ font-size:13.5px; line-height:1.5; color:var(--ink); }
+
+  /* ===== MISC ===== */
+  .empty{ color:var(--muted); font-size:13.5px; text-align:center; padding:38px 16px; font-family:var(--mono); }
+  .empty .big{ font-size:26px; display:block; margin-bottom:8px; }
+
+  .toast{
+    position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(12px);
+    background:var(--gold); color:var(--accent-ink); padding:11px 20px; border-radius:10px;
+    font-size:13.5px; font-weight:700; opacity:0; transition:opacity .25s, transform .25s;
+    pointer-events:none; font-family:var(--sans); box-shadow:0 6px 20px #00000055;
+  }
+  .toast.show{ opacity:1; transform:translateX(-50%) translateY(0); }
 </style>
 </head>
 <body>
 
 <header class="top">
-  <div class="eyebrow">Tanla</div>
+  <div class="brandline">
+    <span class="emblem">🍴</span>
+    <span class="eyebrow">Tanla</span>
+  </div>
   <h1 id="pageTitle">Restoranlar</h1>
-  <p id="pageSub">Menyu, narxlar va haqiqiy fikrlar bir joyda</p>
+  <p id="pageSub">menyu · narxlar · haqiqiy fikrlar</p>
 </header>
 
 <div class="crumbs" id="crumbs" style="display:none;">
@@ -112,11 +214,13 @@
 
 <script>
 // ==== SOZLAMA: backend API manzilini shu yerga yozing ====
-// Masalan: "https://tanla-api.example.com". Bo'sh qoldirsangiz, o'sha domendan ishlaydi.
 const API_BASE = "https://affectionate-mindfulness-production-ae06.up.railway.app";
 
 const tg = window.Telegram ? window.Telegram.WebApp : null;
-if (tg) { tg.ready(); tg.expand(); }
+if (tg) {
+  tg.ready(); tg.expand();
+  try{ tg.setBackgroundColor("#17100a"); tg.setHeaderColor("#17100a"); }catch(e){}
+}
 
 function currentUser(){
   if (tg && tg.initDataUnsafe && tg.initDataUnsafe.user){
@@ -150,23 +254,27 @@ const pageSub = document.getElementById("pageSub");
 
 let state = { view: "restaurants", restoran: null, turkum: null };
 
+function loadingTicket(msg){
+  return `<div class="empty"><span class="big">🎫</span>${msg}</div>`;
+}
+
 // ===================== RESTORANLAR =====================
 async function goRestaurants(){
   state = { view: "restaurants" };
   crumbs.style.display = "none";
   pageTitle.textContent = "Restoranlar";
-  pageSub.textContent = "Menyu, narxlar va haqiqiy fikrlar bir joyda";
-  app.innerHTML = "<div class='empty'>Yuklanmoqda...</div>";
+  pageSub.textContent = "menyu · narxlar · haqiqiy fikrlar";
+  app.innerHTML = loadingTicket("Menyular ochilmoqda...");
   const list = await api("/api/restaurants");
-  if (!list.length){ app.innerHTML = "<div class='empty'>Hozircha restoranlar mavjud emas.</div>"; return; }
+  if (!list.length){ app.innerHTML = "<div class='empty'><span class='big'>🍽</span>Hozircha restoranlar mavjud emas.</div>"; return; }
   app.innerHTML = list.map(r => `
-    <div class="card" onclick="openRestaurant('${encodeURIComponent(r.name)}')">
+    <div class="ticket" onclick="openRestaurant('${encodeURIComponent(r.name)}')">
       <div class="row">
         <div>
-          <p class="rest-name">${r.name}</p>
-          <p class="rest-meta">${r.manzil || "Manzil ko'rsatilmagan"}${r.usluga_foiz != null ? " · Usluga " + r.usluga_foiz + "%" : ""}</p>
+          <p class="t-name">${r.name}</p>
+          <p class="t-meta">📍 ${r.manzil || "Manzil ko'rsatilmagan"}${r.usluga_foiz != null ? " · usluga " + r.usluga_foiz + "%" : ""}</p>
         </div>
-        <span class="badge">${r.ortacha_baho ? "⭐ " + r.ortacha_baho : "Yangi"}</span>
+        <span class="stamp ${r.ortacha_baho ? '' : 'empty-stamp'}">${r.ortacha_baho ? "⭐ " + r.ortacha_baho : "YANGI"}</span>
       </div>
     </div>
   `).join("");
@@ -176,9 +284,10 @@ async function openRestaurant(nameEncoded){
   const name = decodeURIComponent(nameEncoded);
   state = { view: "menu", restoran: name, turkum: null };
   crumbs.style.display = "flex";
+  crumbs.innerHTML = `<button onclick="goRestaurants()">🏠 Restoranlar</button>`;
   pageTitle.textContent = name;
-  pageSub.textContent = "Bo'lim tanlang";
-  app.innerHTML = "<div class='empty'>Yuklanmoqda...</div>";
+  pageSub.textContent = "bo'lim tanlang";
+  app.innerHTML = loadingTicket("Yuklanmoqda...");
   const restaurants = await api("/api/restaurants");
   const r = restaurants.find(x => x.name === name);
   const cats = r ? r.categories : [];
@@ -194,17 +303,22 @@ async function renderMenuView(restoran, cats, activeCat){
   const chips = cats.map(c => `<div class="chip ${c===activeCat?'active':''}" onclick="switchCat('${encodeURIComponent(c)}')">${c}</div>`).join("");
   const items = activeCat ? await api(`/api/menu?restoran=${encodeURIComponent(restoran)}&turkum=${encodeURIComponent(activeCat)}`) : [];
   app.innerHTML = `<div class="chips">${chips}</div>` + (items.length ? items.map(i => `
-    <div class="card" onclick="openItem(${i.id})">
+    <div class="ticket" onclick="openItem(${i.id})">
       <div class="row">
-        <div>
-          <p class="item-name">${i.taom}</p>
-          <p class="item-price">${formatNarx(i.narx)}</p>
+        <div style="flex:1;">
+          <div class="leader-row">
+            <p class="t-name" style="font-size:16px;">${i.taom}</p>
+            <span class="leader"></span>
+            <span class="t-price">${formatNarx(i.narx)}</span>
+          </div>
+          <p class="item-sub">💬 ${i.izohlar_soni} ta izoh</p>
         </div>
-        <span class="badge">${i.baholar_soni ? "⭐ " + i.ortacha_baho : "Baho yo'q"}</span>
       </div>
-      <p class="item-sub">💬 ${i.izohlar_soni} ta izoh</p>
+      <div class="row" style="margin-top:8px; justify-content:flex-end;">
+        <span class="stamp ${i.baholar_soni ? '' : 'no-rating'}">${i.baholar_soni ? "⭐ " + i.ortacha_baho : "Baho yo'q"}</span>
+      </div>
     </div>
-  `).join("") : "<div class='empty'>Bu bo'limda taom topilmadi.</div>");
+  `).join("") : "<div class='empty'><span class='big'>📋</span>Bu bo'limda taom topilmadi.</div>");
 }
 
 function switchCat(catEnc){
@@ -216,37 +330,37 @@ function switchCat(catEnc){
 async function openItem(id){
   state = { view: "item", itemId: id };
   crumbs.innerHTML = `<button onclick="goRestaurants()">🏠 Restoranlar</button>`;
-  app.innerHTML = "<div class='empty'>Yuklanmoqda...</div>";
+  app.innerHTML = loadingTicket("Yuklanmoqda...");
   const item = await api(`/api/menu/${id}`);
-  crumbs.innerHTML = `<button onclick="goRestaurants()">🏠 Restoranlar</button> <span>›</span> <button onclick="openRestaurant('${encodeURIComponent(item.restoran)}')">${item.restoran}</button>`;
+  crumbs.innerHTML = `<button onclick="goRestaurants()">🏠 Restoranlar</button> <span class="sep">›</span> <button onclick="openRestaurant('${encodeURIComponent(item.restoran)}')">${item.restoran}</button>`;
   pageTitle.textContent = item.taom;
   pageSub.textContent = item.turkum;
 
   const reviews = await api(`/api/menu/${id}/reviews`);
 
   app.innerHTML = `
-    <div class="card">
-      <p class="item-price" style="font-size:18px;">${formatNarx(item.narx)}</p>
-      <p class="rest-meta">${item.baholar_soni ? "⭐ " + item.ortacha_baho + " (" + item.baholar_soni + " ta baho)" : "Hali baholanmagan"} · 💬 ${item.izohlar_soni} ta izoh</p>
-      <div class="section-title">Baho bering</div>
+    <div class="hero-ticket">
+      <p class="hero-price">${formatNarx(item.narx)}</p>
+      <p class="hero-meta">${item.baholar_soni ? "⭐ " + item.ortacha_baho + " · " + item.baholar_soni + " ta baho" : "Hali baholanmagan"} · 💬 ${item.izohlar_soni} ta izoh</p>
+      <div class="section-title" style="margin-left:0;">Baho bering</div>
       <div class="stars" id="starsWidget">${[1,2,3,4,5].map(n=>`<span data-n="${n}" onclick="submitRating(${id}, ${n})">★</span>`).join("")}</div>
     </div>
 
-    <div class="card">
-      <div class="section-title" style="margin-top:0;">Izoh qoldirish</div>
+    <div class="card-plain">
+      <div class="section-title" style="margin-top:0; margin-left:0;">Izoh qoldirish</div>
       <textarea id="reviewText" rows="3" placeholder="Nima yoqdi yoki yoqmadi? (kamida bir necha so'z)"></textarea>
       <button class="btn" onclick="submitReview(${id})">Izohni saqlash</button>
     </div>
 
     <div class="section-title">Izohlar (${reviews.length})</div>
-    <div class="card">
+    <div class="guestbook">
       ${reviews.length ? reviews.map(r => `
-        <div class="review">
-          <div class="who">${r.username || "Foydalanuvchi"} <span class="src">${r.source === 'bot' ? '· Telegram bot orqali' : '· Ilova orqali'}</span></div>
+        <div class="entry">
+          <div class="who">${r.username || "Foydalanuvchi"} <span class="src">${r.source === 'bot' ? '🤖 bot' : '🌐 ilova'}</span></div>
           <div class="when">Tashrif: ${r.sana || "-"}</div>
           <div class="txt">${escapeHtml(r.matn || "")}</div>
         </div>
-      `).join("") : "<div class='empty'>Hali izoh yo'q. Birinchi bo'lib siz yozing!</div>"}
+      `).join("") : "<div class='empty'><span class='big'>📭</span>Hali izoh yo'q. Birinchi bo'lib siz yozing!</div>"}
     </div>
   `;
 }
@@ -257,7 +371,9 @@ function escapeHtml(s){
 
 async function submitRating(itemId, stars){
   document.querySelectorAll("#starsWidget span").forEach(s => {
-    s.classList.toggle("on", parseInt(s.dataset.n) <= stars);
+    const n = parseInt(s.dataset.n);
+    s.classList.toggle("on", n <= stars);
+    if (n === stars){ s.classList.add("bump"); setTimeout(()=>s.classList.remove("bump"), 180); }
   });
   try{
     await api(`/api/menu/${itemId}/rating`, {
