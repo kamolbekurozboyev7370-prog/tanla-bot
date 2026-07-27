@@ -74,6 +74,27 @@ Ixtiyoriy: @BotFather orqali `/mybots` → botingiz → **Bot Settings** →
 **Menu Button** bo'limida ham shu havolani ko'rsatsangiz, foydalanuvchilar
 Mini App'ni bot chatining pastki chap tugmasidan ham ocha oladi.
 
+## Admin panel — kirish/chiqish tarixi va yangi foydalanuvchilar statistikasi
+
+Botga `config.py` (yoki `ADMIN_IDS` muhit o'zgaruvchisi) orqali kiritilgan
+Telegram ID uchun asosiy menyuda qo'shimcha **"🔐 Admin panel"** tugmasi
+paydo bo'ladi. Boshqa hech bir foydalanuvchi bu tugmani ko'rmaydi.
+
+Admin panelda:
+
+- **🕘 Kirish/chiqish tarixi** — kim qachon botni ishga tushirgani (/start)
+  va kim qachon botni bloklab, undan chiqib ketgani (so'nggi 30 ta hodisa,
+  vaqti bilan).
+- **📈 Yangi foydalanuvchilar** — **Haftalik** (so'nggi 7 kun) yoki
+  **Oylik** (so'nggi 30 kun) filtr bilan, shu davrda birinchi marta botga
+  kirgan foydalanuvchilar soni va ro'yxati.
+
+Bir nechta administrator kerak bo'lsa:
+
+```bash
+export ADMIN_IDS="340525338,111111111"
+```
+
 ## Ma'lumotlarni ko'chirish haqida eslatma
 
 Eski `malumotlar.json` (agar bo'lsa) avtomatik ko'chirilmaydi — yangi tizim

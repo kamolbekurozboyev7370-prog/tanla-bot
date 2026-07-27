@@ -11,6 +11,13 @@ import os
 # ----- Telegram bot -----
 TOKEN = os.environ.get("BOT_TOKEN", "SIZNING_TOKENINGIZ")
 
+# Faqat shu Telegram ID (raqamli) uchun "Admin panel" ko'rinadi -
+# kirish/chiqish tarixi va yangi foydalanuvchilar statistikasi shu yerdan kuzatiladi.
+# Bir nechta admin kerak bo'lsa, vergul bilan ajratib yozing: "340525338,111111111"
+ADMIN_IDS = [
+    int(x.strip()) for x in os.environ.get("ADMIN_IDS", "340525338").split(",") if x.strip()
+]
+
 # Mini App (veb-ilova) qaysi manzilda joylashganini shu yerga yozing.
 # Masalan: https://tanla-app.example.com
 # Bo'sh qoldirsangiz, botdagi "Ilovada ochish" tugmasi ko'rsatilmaydi.

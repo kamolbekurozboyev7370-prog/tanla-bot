@@ -103,6 +103,30 @@ def izoh_tasdiq_keyboard(taom_id: int) -> InlineKeyboardMarkup:
     ])
 
 
+def admin_panel_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🕘 Kirish/chiqish tarixi", callback_data="admin|history")],
+        [InlineKeyboardButton(text="📈 Yangi foydalanuvchilar", callback_data="admin|newusers")],
+    ])
+
+
+def newusers_filter_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(text="📅 Haftalik", callback_data="newusers|week"),
+            InlineKeyboardButton(text="🗓 Oylik", callback_data="newusers|month"),
+        ],
+    ])
+
+
+def foydalanuvchi_belgisi(username: str, full_name: str, telegram_id: str) -> str:
+    if username:
+        return f"@{username}"
+    if full_name:
+        return full_name
+    return f"ID {telegram_id}"
+
+
 # ----- Sana/vaqt tanlash uchun taqvim klaviaturasi -----
 
 UZ_OYLAR = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun",
@@ -176,7 +200,11 @@ def foydalanuvchi_nomi(user: types.User) -> str:
 
 # ===================== KLAVIATURALAR =====================
 
-def asosiy_menu() -> ReplyKeyboardMarkup:
+def is_admin(user_id: int) -> bool:
+    return user_id in config.ADMIN_IDS
+
+
+def asosiy_menu(user_id: int = None) -> ReplyKeyboardMarkup:
     keyboard = [
         [KeyboardButton(text="⭐️ Restoranlar reytingi"), KeyboardButton(text="🍽 Taomlar reytingi")],
         [KeyboardButton(text="🍲 Nima yemoqchisiz?"), KeyboardButton(text="🏠 Restoranlar")],
@@ -185,6 +213,8 @@ def asosiy_menu() -> ReplyKeyboardMarkup:
     ]
     if config.WEBAPP_URL:
         keyboard.append([KeyboardButton(text="🌐 Ilovada ochish", web_app=WebAppInfo(url=config.WEBAPP_URL))])
+    if user_id is not None and is_admin(user_id):
+        keyboard.append([KeyboardButton(text="🔐 Admin panel")])
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
 
 
@@ -235,15 +265,34 @@ BOGLANISH_TEXT = (
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     user_state[message.from_user.id] = "main"
+    db.track_join(
+        message.from_user.id,
+        username=foydalanuvchi_nomi(message.from_user),
+        full_name=message.from_user.full_name,
+    )
     await message.answer(
         "Assalomu alaykum! Men <b>Tanla</b> botiman 🍽\n\n"
         "Tumandagi restoran va ovqatlanish maskanlarining <b>menyusi</b>, <b>narxlari</b> "
         "va <b>haqiqiy mijozlar fikri</b> asosida sizga eng qulay tanlovni topishga "
         "yordam beraman.\n\n"
         "Quyidagi bo'limlardan birini tanlang 👇",
-        reply_markup=asosiy_menu(),
+        reply_markup=asosiy_menu(message.from_user.id),
         parse_mode="HTML"
     )
+
+
+# ===================== BOT BLOKLANSA/QAYTA OCHILSA (kirish-chiqish kuzatuvi) =====================
+
+@dp.my_chat_member()
+async def on_bot_membership_changed(update: types.ChatMemberUpdated):
+    """Foydalanuvchi botni bloklasa yoki chatni o'chirsa - 'chiqib ketdi' deb yoziladi.
+    Bloklashni bekor qilib qayta yozsa - 'kirdi' deb qayta yoziladi."""
+    yangi_holat = update.new_chat_member.status
+    user = update.from_user
+    if yangi_holat in ("kicked", "left"):
+        db.track_leave(user.id, username=foydalanuvchi_nomi(user), full_name=user.full_name)
+    elif yangi_holat in ("member",):
+        db.track_join(user.id, username=foydalanuvchi_nomi(user), full_name=user.full_name)
 
 
 # ===================== OVOZLI XABARLAR =====================
@@ -262,7 +311,7 @@ async def voice_handler(message: types.Message):
             source="bot",
         )
         user_state[user_id] = "main"
-        await message.answer("Ovozli fikringiz uchun rahmat! 🙏", reply_markup=asosiy_menu())
+        await message.answer("Ovozli fikringiz uchun rahmat! 🙏", reply_markup=asosiy_menu(user_id))
     else:
         await message.answer("Hozircha ovozli xabar kutilmayapti.")
 
@@ -276,7 +325,7 @@ async def media_handler(message: types.Message):
     if state == "izoh_media_kutilmoqda":
         review = pending_review.get(user_id)
         if review is None:
-            await message.answer("Xatolik yuz berdi, qaytadan boshlang.", reply_markup=asosiy_menu())
+            await message.answer("Xatolik yuz berdi, qaytadan boshlang.", reply_markup=asosiy_menu(user_id))
             user_state[user_id] = "main"
             return
         if message.photo:
@@ -449,7 +498,7 @@ async def izoh_saqlash_callback(call: CallbackQuery):
             source="bot",
         )
         user_state[user_id] = "main"
-        await call.message.answer("✅ Izohingiz saqlandi. Rahmat! 🙏", reply_markup=asosiy_menu())
+        await call.message.answer("✅ Izohingiz saqlandi. Rahmat! 🙏", reply_markup=asosiy_menu(user_id))
     await call.answer()
 
 
@@ -458,7 +507,7 @@ async def izoh_bekor_callback(call: CallbackQuery):
     user_id = call.from_user.id
     pending_review.pop(user_id, None)
     user_state[user_id] = "main"
-    await call.message.answer("Izoh bekor qilindi.", reply_markup=asosiy_menu())
+    await call.message.answer("Izoh bekor qilindi.", reply_markup=asosiy_menu(user_id))
     await call.answer()
 
 
@@ -482,6 +531,67 @@ async def korish_callback(call: CallbackQuery):
                 await call.message.answer_video(r["media_file_id"], caption=caption)
             else:
                 await call.message.answer(caption)
+    await call.answer()
+
+
+# ===================== ADMIN PANEL (faqat config.ADMIN_IDS uchun) =====================
+
+@dp.callback_query(F.data == "admin|history")
+async def admin_history_callback(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        await call.answer("Bu bo'lim faqat administrator uchun.", show_alert=True)
+        return
+    hodisalar = db.get_recent_events(limit=30)
+    if not hodisalar:
+        await call.message.answer("Hozircha hech qanday kirish/chiqish hodisasi qayd etilmagan.")
+    else:
+        qismlar = ["🕘 <b>Oxirgi kirish/chiqish hodisalari</b> (so'nggi 30 ta)\n"]
+        for h in hodisalar:
+            belgi = "🟢 Kirdi" if h["event_type"] == "join" else "🔴 Chiqdi (botni bloklagan)"
+            ism = foydalanuvchi_belgisi(h["username"], h["full_name"], h["telegram_id"])
+            vaqt = h["created_at"].strftime("%d.%m.%Y %H:%M")
+            qismlar.append(f"{belgi}\n👤 {ism} · 🕒 {vaqt}")
+        await call.message.answer("\n\n".join(qismlar), parse_mode="HTML")
+    await call.answer()
+
+
+@dp.callback_query(F.data == "admin|newusers")
+async def admin_newusers_callback(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        await call.answer("Bu bo'lim faqat administrator uchun.", show_alert=True)
+        return
+    await call.message.answer(
+        "📈 Yangi foydalanuvchilarni qaysi davr bo'yicha ko'rsataman?",
+        reply_markup=newusers_filter_keyboard(),
+    )
+    await call.answer()
+
+
+@dp.callback_query(F.data.startswith("newusers|"))
+async def newusers_filter_callback(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        await call.answer("Bu bo'lim faqat administrator uchun.", show_alert=True)
+        return
+    period = call.data.split("|")[1]  # "week" | "month"
+    natija = db.get_new_users_stats(period)
+    davr_matni = "so'nggi 7 kun (haftalik)" if period == "week" else "so'nggi 30 kun (oylik)"
+
+    sarlavha = (
+        f"📈 <b>Yangi foydalanuvchilar</b> — {davr_matni}\n\n"
+        f"👥 Jami yangi qo'shilganlar: <b>{natija['soni']}</b> ta"
+    )
+
+    if natija["soni"] == 0:
+        await call.message.answer(sarlavha, parse_mode="HTML")
+    else:
+        qismlar = [sarlavha, ""]
+        for u in natija["users"][:30]:
+            ism = foydalanuvchi_belgisi(u["username"], u["full_name"], u["telegram_id"])
+            vaqt = u["first_joined_at"].strftime("%d.%m.%Y %H:%M")
+            qismlar.append(f"👤 {ism} — 🕒 {vaqt}")
+        if natija["soni"] > 30:
+            qismlar.append(f"\n… va yana {natija['soni'] - 30} ta foydalanuvchi.")
+        await call.message.answer("\n".join(qismlar), parse_mode="HTML")
     await call.answer()
 
 
@@ -516,7 +626,7 @@ async def menu_handler(message: types.Message):
                     f"🧾 {usluga_matni(restoran)}\n"
                     f"📍 {manzil_matni(restoran)}"
                 )
-            await message.answer("\n\n".join(qismlar), parse_mode="HTML", reply_markup=asosiy_menu())
+            await message.answer("\n\n".join(qismlar), parse_mode="HTML", reply_markup=asosiy_menu(user_id))
 
         elif text == "🍽 Taomlar reytingi":
             barcha = db.get_all_menu_items()
@@ -526,7 +636,7 @@ async def menu_handler(message: types.Message):
                 await message.answer(
                     "🍽 Hozircha hech qanday taom baholanmagan.\n"
                     "Taomlarni ko'rib, birinchi bo'lib baho bering!",
-                    reply_markup=asosiy_menu()
+                    reply_markup=asosiy_menu(user_id)
                 )
             else:
                 baholangan.sort(key=lambda x: sum(x[1]) / len(x[1]), reverse=True)
@@ -537,7 +647,7 @@ async def menu_handler(message: types.Message):
                         f"🍽 <b>{item['taom']}</b> ({item['restoran']})\n"
                         f"⭐ {ortacha:.1f} ({len(baholar)} ta baho) · 💰 {narxni_formatlash(item['narx'])}"
                     )
-                await message.answer("\n\n".join(qismlar), parse_mode="HTML", reply_markup=asosiy_menu())
+                await message.answer("\n\n".join(qismlar), parse_mode="HTML", reply_markup=asosiy_menu(user_id))
 
         elif text == "🍲 Nima yemoqchisiz?":
             user_state[user_id] = "turkumlar"
@@ -552,22 +662,37 @@ async def menu_handler(message: types.Message):
             await message.answer("Taom nomini yozing (masalan: shashlik, baliq, chay):", reply_markup=orqaga_menu())
 
         elif text == "📞 Biz bilan bog'lanish":
-            await message.answer(BOGLANISH_TEXT, reply_markup=asosiy_menu())
+            await message.answer(BOGLANISH_TEXT, reply_markup=asosiy_menu(user_id))
 
         elif text == "ℹ️ Bot haqida":
-            await message.answer(BOT_HAQIDA_TEXT, parse_mode="HTML", reply_markup=asosiy_menu())
+            await message.answer(BOT_HAQIDA_TEXT, parse_mode="HTML", reply_markup=asosiy_menu(user_id))
 
         elif text == "🌐 Ilovada ochish":
             pass  # web_app tugmasi Telegram tomonidan avtomatik ochiladi
 
+        elif text == "🔐 Admin panel":
+            if not is_admin(user_id):
+                await message.answer("Bu bo'lim faqat administrator uchun mavjud.", reply_markup=asosiy_menu(user_id))
+            else:
+                jami = db.get_total_users_count()
+                faol = db.get_active_users_count()
+                await message.answer(
+                    f"🔐 <b>Admin panel</b>\n\n"
+                    f"👥 Jami foydalanuvchilar: <b>{jami}</b>\n"
+                    f"✅ Hozir faol (botni bloklamagan): <b>{faol}</b>\n\n"
+                    f"Quyidagilardan birini tanlang:",
+                    parse_mode="HTML",
+                    reply_markup=admin_panel_keyboard(),
+                )
+
         else:
-            await message.answer("Iltimos, quyidagi tugmalardan birini tanlang 👇", reply_markup=asosiy_menu())
+            await message.answer("Iltimos, quyidagi tugmalardan birini tanlang 👇", reply_markup=asosiy_menu(user_id))
 
     # ---------- TURKUMLAR MENYUSI (barcha restoranlar bo'yicha) ----------
     elif state == "turkumlar":
         if text == "0️⃣ Orqaga":
             user_state[user_id] = "main"
-            await message.answer("Asosiy menyu:", reply_markup=asosiy_menu())
+            await message.answer("Asosiy menyu:", reply_markup=asosiy_menu(user_id))
         elif text in db.get_categories():
             taomlar = db.get_menu_items(turkum=text)
             await message.answer(f"📂 <b>{text}</b> bo'limidagi taomlar:", parse_mode="HTML", reply_markup=turkumlar_menu())
@@ -580,7 +705,7 @@ async def menu_handler(message: types.Message):
     elif state == "restoranlar":
         if text == "0️⃣ Orqaga":
             user_state[user_id] = "main"
-            await message.answer("Asosiy menyu:", reply_markup=asosiy_menu())
+            await message.answer("Asosiy menyu:", reply_markup=asosiy_menu(user_id))
         elif text in db.get_restaurant_names():
             user_selected_restoran[user_id] = text
             user_state[user_id] = "restoran_turkumlar"
@@ -618,7 +743,7 @@ async def menu_handler(message: types.Message):
     elif state == "qidiruv":
         if text == "0️⃣ Orqaga":
             user_state[user_id] = "main"
-            await message.answer("Asosiy menyu:", reply_markup=asosiy_menu())
+            await message.answer("Asosiy menyu:", reply_markup=asosiy_menu(user_id))
         else:
             natijalar = db.search_menu(text)
             if not natijalar:
@@ -650,7 +775,7 @@ async def menu_handler(message: types.Message):
         review = pending_review.get(user_id)
         if review is None:
             user_state[user_id] = "main"
-            await message.answer("Xatolik yuz berdi, qaytadan urinib ko'ring.", reply_markup=asosiy_menu())
+            await message.answer("Xatolik yuz berdi, qaytadan urinib ko'ring.", reply_markup=asosiy_menu(user_id))
             return
         if not izoh_matni_yaroqlimi(text):
             await message.answer(
@@ -678,7 +803,7 @@ async def menu_handler(message: types.Message):
 
     else:
         user_state[user_id] = "main"
-        await message.answer("Asosiy menyuga qaytdik:", reply_markup=asosiy_menu())
+        await message.answer("Asosiy menyuga qaytdik:", reply_markup=asosiy_menu(user_id))
 
 
 async def main():

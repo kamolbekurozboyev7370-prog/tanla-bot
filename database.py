@@ -14,9 +14,10 @@ almashtirish kifoya - qolgan kod o'zgarmaydi (SQLAlchemy shuning uchun
 ishlatilgan).
 """
 
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     ForeignKey,
@@ -105,6 +106,32 @@ class Voice(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
 
     menu_item = relationship("MenuItem", back_populates="voices")
+
+
+class BotUser(Base):
+    """Botdan foydalangan har bir shaxs haqida joriy holat (hozir faolmi yoki botni bloklaganmi)."""
+    __tablename__ = "bot_users"
+
+    id = Column(Integer, primary_key=True)
+    telegram_id = Column(String, unique=True, nullable=False)
+    username = Column(String, nullable=True)
+    full_name = Column(String, nullable=True)
+    first_joined_at = Column(DateTime, default=datetime.utcnow)  # birinchi marta /start bosgan vaqti
+    last_joined_at = Column(DateTime, default=datetime.utcnow)   # oxirgi marta kirgan (yoki qayta kirgan) vaqti
+    left_at = Column(DateTime, nullable=True)                    # botni oxirgi bloklagan/chiqib ketgan vaqti
+    is_active = Column(Boolean, default=True)                    # hozir bot bilan aloqasi bormi
+
+
+class UserEvent(Base):
+    """Har bir kirish ('join') va chiqish ('leave') hodisasi - to'liq tarix uchun."""
+    __tablename__ = "user_events"
+
+    id = Column(Integer, primary_key=True)
+    telegram_id = Column(String, nullable=False)
+    username = Column(String, nullable=True)
+    full_name = Column(String, nullable=True)
+    event_type = Column(String, nullable=False)  # "join" | "leave"
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 # ===================== INIT / SEED =====================
@@ -319,3 +346,123 @@ def add_voice(item_id: int, file_id: str, username: str = None, user_id: str = N
             source=source,
         ))
         db.commit()
+
+
+# ===================== FOYDALANUVCHILAR KIRISH/CHIQISH =====================
+
+def track_join(telegram_id, username: str = None, full_name: str = None):
+    """Foydalanuvchi botni ishga tushirganda (/start) chaqiriladi. Yangi bo'lsa yaratadi,
+    eski bo'lsa qayta faollashtiradi va 'join' hodisasini yozadi."""
+    telegram_id = str(telegram_id)
+    now = datetime.utcnow()
+    with SessionLocal() as db:
+        user = db.query(BotUser).filter(BotUser.telegram_id == telegram_id).first()
+        if user is None:
+            user = BotUser(
+                telegram_id=telegram_id,
+                username=username,
+                full_name=full_name,
+                first_joined_at=now,
+                last_joined_at=now,
+                left_at=None,
+                is_active=True,
+            )
+            db.add(user)
+        else:
+            user.username = username or user.username
+            user.full_name = full_name or user.full_name
+            user.last_joined_at = now
+            user.left_at = None
+            user.is_active = True
+        db.add(UserEvent(
+            telegram_id=telegram_id,
+            username=username,
+            full_name=full_name,
+            event_type="join",
+            created_at=now,
+        ))
+        db.commit()
+
+
+def track_leave(telegram_id, username: str = None, full_name: str = None):
+    """Foydalanuvchi botni bloklaganda/chatni o'chirganda chaqiriladi."""
+    telegram_id = str(telegram_id)
+    now = datetime.utcnow()
+    with SessionLocal() as db:
+        user = db.query(BotUser).filter(BotUser.telegram_id == telegram_id).first()
+        if user is not None:
+            user.left_at = now
+            user.is_active = False
+            username = username or user.username
+            full_name = full_name or user.full_name
+        db.add(UserEvent(
+            telegram_id=telegram_id,
+            username=username,
+            full_name=full_name,
+            event_type="leave",
+            created_at=now,
+        ))
+        db.commit()
+
+
+def get_recent_events(limit: int = 30) -> list:
+    """Eng oxirgi kirish/chiqish hodisalari (admin uchun tarix)."""
+    with SessionLocal() as db:
+        rows = (
+            db.query(UserEvent)
+            .order_by(UserEvent.created_at.desc())
+            .limit(limit)
+            .all()
+        )
+        return [
+            {
+                "telegram_id": r.telegram_id,
+                "username": r.username,
+                "full_name": r.full_name,
+                "event_type": r.event_type,
+                "created_at": r.created_at,
+            }
+            for r in rows
+        ]
+
+
+def get_active_users_count() -> int:
+    with SessionLocal() as db:
+        return db.query(BotUser).filter(BotUser.is_active == True).count()  # noqa: E712
+
+
+def _period_kesim(period: str) -> datetime:
+    now = datetime.utcnow()
+    if period == "week":
+        return now - timedelta(days=7)
+    return now - timedelta(days=30)  # "month"
+
+
+def get_new_users_stats(period: str = "week") -> dict:
+    """period: 'week' yoki 'month'. Shu davrda birinchi marta kirgan foydalanuvchilar."""
+    kesim = _period_kesim(period)
+    with SessionLocal() as db:
+        soni = db.query(BotUser).filter(BotUser.first_joined_at >= kesim).count()
+        users = (
+            db.query(BotUser)
+            .filter(BotUser.first_joined_at >= kesim)
+            .order_by(BotUser.first_joined_at.desc())
+            .all()
+        )
+        return {
+            "soni": soni,
+            "users": [
+                {
+                    "telegram_id": u.telegram_id,
+                    "username": u.username,
+                    "full_name": u.full_name,
+                    "first_joined_at": u.first_joined_at,
+                }
+                for u in users
+            ],
+        }
+
+
+def get_total_users_count() -> int:
+    with SessionLocal() as db:
+        return db.query(BotUser).count()
