@@ -287,7 +287,7 @@ async function goRestaurants(){
       <div class="row" onclick="openRestaurant('${encodeURIComponent(r.name)}')" style="cursor:pointer;">
         <div>
           <p class="t-name">${r.name}</p>
-          <p class="t-meta">📍 ${r.manzil || "Manzil ko'rsatilmagan"}${r.usluga_foiz != null ? " · usluga " + r.usluga_foiz + "%" : ""}</p>
+          <p class="t-meta">📍 <a href="${xaritaHavolasi(r)}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="color:var(--muted); text-decoration:underline;">${r.manzil || "Manzil ko'rsatilmagan"}</a>${r.usluga_foiz != null ? " · usluga " + r.usluga_foiz + "%" : ""}</p>
         </div>
         <span class="stamp ${r.ortacha_baho ? '' : 'empty-stamp'}">${r.ortacha_baho ? "⭐ " + r.ortacha_baho : "YANGI"}</span>
       </div>
@@ -307,18 +307,26 @@ async function openRestaurant(nameEncoded){
   const restaurants = await api("/api/restaurants");
   const r = restaurants.find(x => x.name === name);
   const cats = r ? r.categories : [];
-  renderMenuView(name, cats, cats[0] || null);
+  renderMenuView(name, cats, cats[0] || null, r);
 }
 
 let currentRestoran = null;
 let currentCats = [];
+let currentRestoranObj = null;
 
-async function renderMenuView(restoran, cats, activeCat){
+async function renderMenuView(restoran, cats, activeCat, restoranObj){
   currentRestoran = restoran;
   currentCats = cats;
+  if (restoranObj) currentRestoranObj = restoranObj;
+  const r = currentRestoranObj;
+  const manzilBar = r ? `
+    <div class="ticket" style="margin-bottom:14px;">
+      <p class="t-meta">📍 <a href="${xaritaHavolasi(r)}" target="_blank" rel="noopener" style="color:var(--ink); text-decoration:underline;">${r.manzil || "Manzil ko'rsatilmagan"}</a>${r.usluga_foiz != null ? " · usluga " + r.usluga_foiz + "%" : ""}</p>
+      <a class="map-link" href="${xaritaHavolasi(r)}" target="_blank" rel="noopener">📍 Xaritada ko'rish</a>
+    </div>` : "";
   const chips = cats.map(c => `<div class="chip ${c===activeCat?'active':''}" onclick="switchCat('${encodeURIComponent(c)}')">${c}</div>`).join("");
   const items = activeCat ? await api(`/api/menu?restoran=${encodeURIComponent(restoran)}&turkum=${encodeURIComponent(activeCat)}`) : [];
-  app.innerHTML = `<div class="chips">${chips}</div>` + (items.length ? items.map(i => `
+  app.innerHTML = manzilBar + `<div class="chips">${chips}</div>` + (items.length ? items.map(i => `
     <div class="ticket" onclick="openItem(${i.id})">
       <div class="row">
         <div style="flex:1;">
