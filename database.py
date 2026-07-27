@@ -46,6 +46,7 @@ class Restaurant(Base):
     name = Column(String, unique=True, nullable=False)
     manzil = Column(String, nullable=True)
     usluga_foiz = Column(Integer, nullable=True)
+    xarita_havolasi = Column(String, nullable=True)  # Google Maps'dagi aniq joylashuv havolasi
 
     menu_items = relationship("MenuItem", back_populates="restoran", cascade="all, delete-orphan")
 
@@ -138,6 +139,36 @@ class UserEvent(Base):
 
 def init_db():
     Base.metadata.create_all(engine)
+    _migrate_yangi_ustunlar()
+
+
+def _migrate_yangi_ustunlar():
+    """Eski bazada mavjud bo'lmagan yangi ustunlarni qo'shib qo'yadi
+    (bazani o'chirib qayta yaratmasdan, mavjud ma'lumotlar saqlanadi).
+    Faqat SQLite uchun; PostgreSQL'ga o'tilsa, ustunlar allaqachon
+    to'g'ri sxema bilan yaratiladi (create_all orqali)."""
+    if engine.dialect.name != "sqlite":
+        return
+    with engine.connect() as conn:
+        mavjud_ustunlar = {row[1] for row in conn.exec_driver_sql("PRAGMA table_info(restaurants)")}
+        if "xarita_havolasi" not in mavjud_ustunlar:
+            conn.exec_driver_sql("ALTER TABLE restaurants ADD COLUMN xarita_havolasi VARCHAR")
+            conn.commit()
+
+
+def sync_restaurant_info():
+    """seed_data.py dagi manzil/usluga/xarita ma'lumotlarini mavjud restoranlarga
+    har ishga tushganda yangilaydi - restoranlar allaqachon bazada bo'lsa ham ishlaydi."""
+    with SessionLocal() as db:
+        for r in db.query(Restaurant).all():
+            nom = r.name
+            if nom in seed_data.RESTORAN_MANZIL:
+                r.manzil = seed_data.RESTORAN_MANZIL[nom]
+            if nom in seed_data.RESTORAN_USLUGA:
+                r.usluga_foiz = seed_data.RESTORAN_USLUGA[nom]
+            if nom in getattr(seed_data, "RESTORAN_XARITA", {}):
+                r.xarita_havolasi = seed_data.RESTORAN_XARITA[nom]
+        db.commit()
 
 
 def seed_menu_if_empty():
@@ -153,6 +184,7 @@ def seed_menu_if_empty():
                 name=nom,
                 manzil=seed_data.RESTORAN_MANZIL.get(nom),
                 usluga_foiz=seed_data.RESTORAN_USLUGA.get(nom),
+                xarita_havolasi=getattr(seed_data, "RESTORAN_XARITA", {}).get(nom),
             )
             db.add(r)
             db.flush()
@@ -192,8 +224,8 @@ def get_restaurant_info(restoran: str) -> dict:
     with SessionLocal() as db:
         r = db.query(Restaurant).filter(Restaurant.name == restoran).first()
         if not r:
-            return {"manzil": None, "usluga_foiz": None}
-        return {"manzil": r.manzil, "usluga_foiz": r.usluga_foiz}
+            return {"manzil": None, "usluga_foiz": None, "xarita_havolasi": None}
+        return {"manzil": r.manzil, "usluga_foiz": r.usluga_foiz, "xarita_havolasi": r.xarita_havolasi}
 
 
 def get_categories() -> list:

@@ -33,6 +33,7 @@ app.add_middleware(
 def on_startup():
     db.init_db()
     db.seed_menu_if_empty()
+    db.sync_restaurant_info()
 
 
 # ===================== SXEMALAR =====================
@@ -61,6 +62,7 @@ def list_restaurants():
             "name": nom,
             "manzil": info["manzil"],
             "usluga_foiz": info["usluga_foiz"],
+            "xarita_havolasi": info.get("xarita_havolasi"),
             "ortacha_baho": xulosa["ortacha"],
             "baholar_soni": xulosa["soni"],
             "categories": db.get_restaurant_categories(nom),

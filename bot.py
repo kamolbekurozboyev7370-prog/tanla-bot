@@ -2,6 +2,7 @@ import asyncio
 import calendar as calendar_module
 import logging
 import re
+import urllib.parse
 from datetime import datetime, timedelta
 
 from aiogram import Bot, Dispatcher, F, types
@@ -41,6 +42,23 @@ def manzil_matni(restoran: str) -> str:
     if not manzil:
         return "Manzil: ko'rsatilmagan"
     return f"Manzil: {manzil}"
+
+
+def google_maps_havolasi(restoran: str) -> str:
+    """Bazada aniq Google Maps havolasi bo'lsa o'shani, bo'lmasa manzil bo'yicha
+    qidiruv havolasini qaytaradi."""
+    info = db.get_restaurant_info(restoran)
+    if info.get("xarita_havolasi"):
+        return info["xarita_havolasi"]
+    manzil = info.get("manzil")
+    soz = f"{restoran} {manzil}" if manzil else restoran
+    return "https://www.google.com/maps/search/?api=1&query=" + urllib.parse.quote(soz)
+
+
+def manzil_xarita_keyboard(restoran: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📍 Xaritada ko'rish / Yo'l ko'rsatish", url=google_maps_havolasi(restoran))]
+    ])
 
 
 def usluga_matni(restoran: str) -> str:
@@ -721,9 +739,12 @@ async def menu_handler(message: types.Message):
             await message.answer(
                 f"🏠 <b>{text}</b>\n"
                 f"📍 {manzil_matni(text)}\n"
-                f"🧾 {usluga_matni(text)}\n\n"
-                f"Qaysi turkumni ko'rmoqchisiz?",
+                f"🧾 {usluga_matni(text)}",
                 parse_mode="HTML",
+                reply_markup=manzil_xarita_keyboard(text)
+            )
+            await message.answer(
+                "Qaysi turkumni ko'rmoqchisiz?",
                 reply_markup=restoran_turkumlar_menu(text)
             )
         else:
@@ -818,6 +839,7 @@ async def menu_handler(message: types.Message):
 async def main():
     db.init_db()
     db.seed_menu_if_empty()
+    db.sync_restaurant_info()
     await dp.start_polling(bot)
 
 

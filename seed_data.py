@@ -148,3 +148,10 @@ RESTORAN_MANZIL = {
     "Chayxona Davdon Baliq": "Qo'shko'pir tuman",
     "Malika milliy taomlari": "Qo'shko'pir tuman",
 }
+
+# Restoranning Google Maps'dagi aniq joylashuv havolasi (mavjud bo'lsa,
+# botdagi "Xaritada ko'rish" tugmasi aynan shu havolaga olib boradi).
+RESTORAN_XARITA = {
+    "Chayxona Davdon Baliq": "https://maps.app.goo.gl/LrikePsK9yoSsDPw6",
+    "Malika milliy taomlari": "https://maps.app.goo.gl/nJhxcmWJnFX555pf9",
+}
