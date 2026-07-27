@@ -2,7 +2,7 @@ import asyncio
 import calendar as calendar_module
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from aiogram import Bot, Dispatcher, F, types
 from aiogram.filters import Command
@@ -125,6 +125,15 @@ def foydalanuvchi_belgisi(username: str, full_name: str, telegram_id: str) -> st
     if full_name:
         return full_name
     return f"ID {telegram_id}"
+
+
+# Bazadagi vaqtlar UTC (butun dunyo standarti) bo'yicha saqlanadi.
+# Admin panelda ko'rsatilganda Toshkent vaqtiga (UTC+5) o'giramiz.
+TOSHKENT_FARQI = timedelta(hours=5)
+
+
+def mahalliy_vaqt(dt: datetime) -> str:
+    return (dt + TOSHKENT_FARQI).strftime("%d.%m.%Y %H:%M")
 
 
 # ----- Sana/vaqt tanlash uchun taqvim klaviaturasi -----
@@ -549,7 +558,7 @@ async def admin_history_callback(call: CallbackQuery):
         for h in hodisalar:
             belgi = "🟢 Kirdi" if h["event_type"] == "join" else "🔴 Chiqdi (botni bloklagan)"
             ism = foydalanuvchi_belgisi(h["username"], h["full_name"], h["telegram_id"])
-            vaqt = h["created_at"].strftime("%d.%m.%Y %H:%M")
+            vaqt = mahalliy_vaqt(h["created_at"])
             qismlar.append(f"{belgi}\n👤 {ism} · 🕒 {vaqt}")
         await call.message.answer("\n\n".join(qismlar), parse_mode="HTML")
     await call.answer()
@@ -587,7 +596,7 @@ async def newusers_filter_callback(call: CallbackQuery):
         qismlar = [sarlavha, ""]
         for u in natija["users"][:30]:
             ism = foydalanuvchi_belgisi(u["username"], u["full_name"], u["telegram_id"])
-            vaqt = u["first_joined_at"].strftime("%d.%m.%Y %H:%M")
+            vaqt = mahalliy_vaqt(u["first_joined_at"])
             qismlar.append(f"👤 {ism} — 🕒 {vaqt}")
         if natija["soni"] > 30:
             qismlar.append(f"\n… va yana {natija['soni'] - 30} ta foydalanuvchi.")
