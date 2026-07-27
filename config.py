@@ -21,7 +21,7 @@ ADMIN_IDS = [
 # Mini App (veb-ilova) qaysi manzilda joylashganini shu yerga yozing.
 # Masalan: https://tanla-app.example.com
 # Bo'sh qoldirsangiz, botdagi "Ilovada ochish" tugmasi ko'rsatilmaydi.
-WEBAPP_URL = os.environ.get("WEBAPP_URL", "")
+WEBAPP_URL = os.environ.get("WEBAPP_URL", "https://deft-sunflower-55c245.netlify.app")
 
 # ----- Baza (Database) -----
 # Ikkalasi (bot.py va api.py) ham AYNAN shu faylga ulanishi kerak,
