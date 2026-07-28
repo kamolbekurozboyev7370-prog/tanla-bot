@@ -37,4 +37,4 @@ API_PORT = int(os.environ.get("API_PORT", "8000"))
 # Ishlab chiqish paytida barcha manzillarga ruxsat beramiz (*),
 # lekin serverga chiqarganda faqat Mini App domenini yozing, masalan:
 # CORS_ORIGINS = ["https://tanla-app.example.com"]
-CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*").split(",")
+CORS_ORIGINS = os.environ.get("CORS_ORIGINS", "*").split(",")1
