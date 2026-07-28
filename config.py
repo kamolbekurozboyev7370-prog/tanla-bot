@@ -7,6 +7,9 @@ shunda kodni o'zgartirmasdan serverda sozlash oson bo'ladi.
 """
 
 import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # ----- Telegram bot -----
 TOKEN = os.environ.get("BOT_TOKEN", "SIZNING_TOKENINGIZ")
