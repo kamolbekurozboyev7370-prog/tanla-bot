@@ -321,13 +321,24 @@ def hisob_savat_matni(user_id: int) -> str:
     savat = hisob_savat.get(user_id)
     if not savat or not savat["items"]:
         return "Savat hozircha bo'sh."
-    qismlar = [f"🧾 <b>{savat['restoran']}</b> — savat\n"]
-    jami = 0
+
+    restoran = savat["restoran"]
+    info = db.get_restaurant_info(restoran)
+    usluga_foiz = info["usluga_foiz"] or 0
+
+    qismlar = [f"🧾 <b>{restoran}</b> — savat\n"]
+    taomlar_summasi = 0
     for item in savat["items"].values():
         summa = item["narx"] * item["miqdor"]
-        jami += summa
+        taomlar_summasi += summa
         qismlar.append(f"• {item['taom']} — {item['miqdor']} dona × {narxni_formatlash(item['narx'])} = {narxni_formatlash(summa)}")
-    qismlar.append(f"\nOraliq summa: {narxni_formatlash(jami)}")
+
+    usluga_summasi = taomlar_summasi * usluga_foiz / 100
+    umumiy = taomlar_summasi + usluga_summasi
+
+    qismlar.append(f"\nTaomlar summasi: {narxni_formatlash(taomlar_summasi)}")
+    qismlar.append(f"Usluga ({usluga_foiz}%): {narxni_formatlash(usluga_summasi)}")
+    qismlar.append(f"<b>Taxminiy jami (hozircha): {narxni_formatlash(umumiy)}</b>")
     return "\n".join(qismlar)
 
 
@@ -753,6 +764,10 @@ async def hs_hisobla_callback(call: CallbackQuery):
     if not savat or not savat["items"]:
         await call.answer("Savat hozircha bo'sh.", show_alert=True)
         return
+
+    yakuniy_matn = hisob_savat_matni(user_id) + HISOB_OGOHLANTIRISH
+    await call.message.answer(yakuniy_matn, parse_mode="HTML", reply_markup=asosiy_menu(user_id))
+    await call.answer()
 
     restoran = savat["restoran"]
     info = db.get_restaurant_info(restoran)
