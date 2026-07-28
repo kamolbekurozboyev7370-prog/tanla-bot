@@ -384,17 +384,21 @@ def add_voice(item_id: int, file_id: str, username: str = None, user_id: str = N
 LOGIN_COOLDOWN_MINUTES = 30  # shu vaqt ichida qayta "kirdi" deb yozilmaydi
 
 
+LOGIN_COOLDOWN_MINUTES = 30  # shu vaqt ichida qayta 'faollik' yozuvi qo'shilmaydi
+
+
 def track_activity(telegram_id, username: str = None, full_name: str = None):
-    """Foydalanuvchi botga /start bosmasdan ham istalgan xabar yoki tugma orqali
-    murojaat qilganda chaqiriladi. Agar oxirgi 'kirdi' yozuvidan beri
-    LOGIN_COOLDOWN_MINUTES dan ko'p vaqt o'tgan bo'lsa, yangi 'kirdi' hodisasi yoziladi."""
+    """Foydalanuvchi botga istalgan xabar yoki tugma orqali murojaat qilganda chaqiriladi.
+    Bu OBUNA BO'LISH (/start) dan FARQLI - kundalik foydalanishni alohida qayd etadi.
+    Oxirgi 'faollik' yozuvidan beri LOGIN_COOLDOWN_MINUTES dan ko'p vaqt o'tgan bo'lsagina
+    yangi 'faollik' hodisasi yoziladi (baza keraksiz yozuvlar bilan to'lib ketmasligi uchun)."""
     telegram_id = str(telegram_id)
     now = datetime.utcnow()
     with SessionLocal() as db:
         user = db.query(BotUser).filter(BotUser.telegram_id == telegram_id).first()
         last_event = (
             db.query(UserEvent)
-            .filter(UserEvent.telegram_id == telegram_id, UserEvent.event_type == "join")
+            .filter(UserEvent.telegram_id == telegram_id, UserEvent.event_type == "faollik")
             .order_by(UserEvent.created_at.desc())
             .first()
         )
@@ -403,31 +407,16 @@ def track_activity(telegram_id, username: str = None, full_name: str = None):
             or (now - last_event.created_at) > timedelta(minutes=LOGIN_COOLDOWN_MINUTES)
         )
 
-        if user is None:
-            user = BotUser(
-                telegram_id=telegram_id,
-                username=username,
-                full_name=full_name,
-                first_joined_at=now,
-                last_joined_at=now,
-                left_at=None,
-                is_active=True,
-            )
-            db.add(user)
-            should_log = True
-        else:
+        if user is not None:
             user.username = username or user.username
             user.full_name = full_name or user.full_name
-            user.last_joined_at = now
-            user.left_at = None
-            user.is_active = True
 
         if should_log:
             db.add(UserEvent(
                 telegram_id=telegram_id,
                 username=username,
                 full_name=full_name,
-                event_type="join",
+                event_type="faollik",
                 created_at=now,
             ))
         db.commit()
@@ -486,11 +475,17 @@ def track_leave(telegram_id, username: str = None, full_name: str = None):
         db.commit()
 
 
-def get_recent_events(limit: int = 30) -> list:
-    """Eng oxirgi kirish/chiqish hodisalari (admin uchun tarix)."""
+def get_recent_events(limit: int = 30, event_types: list = None) -> list:
+    """Eng oxirgi hodisalar (admin uchun tarix).
+    event_types berilsa, faqat o'sha turdagi hodisalar qaytariladi:
+    - ["join", "leave"] -> obunachilar tarixi (/start, botni bloklash)
+    - ["faollik"] -> kundalik foydalanish tarixi"""
     with SessionLocal() as db:
+        query = db.query(UserEvent)
+        if event_types:
+            query = query.filter(UserEvent.event_type.in_(event_types))
         rows = (
-            db.query(UserEvent)
+            query
             .order_by(UserEvent.created_at.desc())
             .limit(limit)
             .all()

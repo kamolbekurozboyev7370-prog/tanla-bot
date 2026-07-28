@@ -126,7 +126,8 @@ def izoh_tasdiq_keyboard(taom_id: int) -> InlineKeyboardMarkup:
 
 def admin_panel_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🕘 Kirish/chiqish tarixi", callback_data="admin|history")],
+        [InlineKeyboardButton(text="🕘 Obunachilar tarixi (kirdi/chiqdi)", callback_data="admin|history")],
+        [InlineKeyboardButton(text="📊 Kundalik foydalanish", callback_data="admin|activity")],
         [InlineKeyboardButton(text="📈 Yangi foydalanuvchilar", callback_data="admin|newusers")],
     ])
 
@@ -791,16 +792,34 @@ async def admin_history_callback(call: CallbackQuery):
     if not is_admin(call.from_user.id):
         await call.answer("Bu bo'lim faqat administrator uchun.", show_alert=True)
         return
-    hodisalar = db.get_recent_events(limit=30)
+    hodisalar = db.get_recent_events(limit=30, event_types=["join", "leave"])
     if not hodisalar:
-        await call.message.answer("Hozircha hech qanday kirish/chiqish hodisasi qayd etilmagan.")
+        await call.message.answer("Hozircha hech qanday obuna bo'lish/chiqish hodisasi qayd etilmagan.")
     else:
-        qismlar = ["🕘 <b>Oxirgi kirish/chiqish hodisalari</b> (so'nggi 30 ta)\n"]
+        qismlar = ["🕘 <b>Obunachilar tarixi</b> (so'nggi 30 ta)\n"]
         for h in hodisalar:
-            belgi = "🟢 Kirdi" if h["event_type"] == "join" else "🔴 Chiqdi (botni bloklagan)"
+            belgi = "🟢 Obuna bo'ldi" if h["event_type"] == "join" else "🔴 Chiqdi (botni bloklagan)"
             ism = foydalanuvchi_belgisi(h["username"], h["full_name"], h["telegram_id"])
             vaqt = mahalliy_vaqt(h["created_at"])
             qismlar.append(f"{belgi}\n👤 {ism} · 🕒 {vaqt}")
+        await call.message.answer("\n\n".join(qismlar), parse_mode="HTML")
+    await call.answer()
+
+
+@dp.callback_query(F.data == "admin|activity")
+async def admin_activity_callback(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        await call.answer("Bu bo'lim faqat administrator uchun.", show_alert=True)
+        return
+    hodisalar = db.get_recent_events(limit=30, event_types=["faollik"])
+    if not hodisalar:
+        await call.message.answer("Hozircha hech qanday kundalik foydalanish hodisasi qayd etilmagan.")
+    else:
+        qismlar = ["📊 <b>Kundalik foydalanish tarixi</b> (so'nggi 30 ta)\n"]
+        for h in hodisalar:
+            ism = foydalanuvchi_belgisi(h["username"], h["full_name"], h["telegram_id"])
+            vaqt = mahalliy_vaqt(h["created_at"])
+            qismlar.append(f"🟢 Foydalandi\n👤 {ism} · 🕒 {vaqt}")
         await call.message.answer("\n\n".join(qismlar), parse_mode="HTML")
     await call.answer()
 
