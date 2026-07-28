@@ -28,6 +28,9 @@ user_state = {}              # user_id -> holat
 user_selected_restoran = {}  # user_id -> tanlangan restoran nomi
 pending_review = {}          # user_id -> to'ldirilayotgan izoh ma'lumotlari
 
+hisob_savat = {}              # user_id -> {"restoran": str, "items": {taom_id: {"taom","narx","miqdor"}}}
+hisob_miqdor_kutilayotgan = {}  # user_id -> {"taom_id": int, "rejim": "qoshish" | "tahrirlash"}
+
 
 # ===================== YORDAMCHI FUNKSIYALAR =====================
 
@@ -235,7 +238,7 @@ def asosiy_menu(user_id: int = None) -> ReplyKeyboardMarkup:
     keyboard = [
         [KeyboardButton(text="⭐️ Restoranlar reytingi"), KeyboardButton(text="🍽 Taomlar reytingi")],
         [KeyboardButton(text="🍲 Nima yemoqchisiz?"), KeyboardButton(text="🏠 Restoranlar")],
-        [KeyboardButton(text="🔍 Taom nomini qidirish")],
+        [KeyboardButton(text="🔍 Taom nomini qidirish"), KeyboardButton(text="🧮 Taxminiy hisob-kitob")],
         [KeyboardButton(text="📞 Biz bilan bog'lanish"), KeyboardButton(text="ℹ️ Bot haqida")],
     ]
     if config.WEBAPP_URL:
@@ -265,6 +268,87 @@ def restoran_turkumlar_menu(restoran: str) -> ReplyKeyboardMarkup:
     tugmalar = [[KeyboardButton(text=t)] for t in db.get_restaurant_categories(restoran)]
     tugmalar.append([KeyboardButton(text="0️⃣ Orqaga")])
     return ReplyKeyboardMarkup(keyboard=tugmalar, resize_keyboard=True)
+
+
+# ----- Taxminiy hisob-kitob (mijoz uchun) -----
+
+def hisob_restoranlar_menu() -> ReplyKeyboardMarkup:
+    tugmalar = [[KeyboardButton(text=r)] for r in db.get_restaurant_names()]
+    tugmalar.append([KeyboardButton(text="0️⃣ Bekor qilish")])
+    return ReplyKeyboardMarkup(keyboard=tugmalar, resize_keyboard=True)
+
+
+def hisob_taomlar_keyboard(taomlar: list) -> InlineKeyboardMarkup:
+    """Barcha taomlarni bitta ro'yxatda, har birining oldida ➕ tugmasi bilan ko'rsatadi."""
+    qatorlar = []
+    joriy_turkum = None
+    for item in taomlar:
+        if item["turkum"] != joriy_turkum:
+            joriy_turkum = item["turkum"]
+            qatorlar.append([InlineKeyboardButton(text=f"— {joriy_turkum} —", callback_data="hs_ignore")])
+        qatorlar.append([InlineKeyboardButton(
+            text=f"➕ {item['taom']} — {narxni_formatlash(item['narx'])}",
+            callback_data=f"hs_add|{item['id']}"
+        )])
+    qatorlar.append([InlineKeyboardButton(text="🧮 Taxminiy hisobni hisoblash", callback_data="hs_hisobla")])
+    qatorlar.append([InlineKeyboardButton(text="✏️ Savatni tahrirlash", callback_data="hs_tahrir")])
+    qatorlar.append([InlineKeyboardButton(text="🗑 Savatni bekor qilish", callback_data="hs_bekor")])
+    return InlineKeyboardMarkup(inline_keyboard=qatorlar)
+
+
+def hisob_tahrirlash_keyboard(user_id: int) -> InlineKeyboardMarkup:
+    savat = hisob_savat.get(user_id, {}).get("items", {})
+    qatorlar = []
+    for taom_id, item in savat.items():
+        qatorlar.append([InlineKeyboardButton(
+            text=f"{item['taom']} — {item['miqdor']} dona",
+            callback_data=f"hs_item|{taom_id}"
+        )])
+    qatorlar.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="hs_royxatga_qaytish")])
+    return InlineKeyboardMarkup(inline_keyboard=qatorlar)
+
+
+def hisob_item_amal_keyboard(taom_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✏️ Miqdorini o'zgartirish", callback_data=f"hs_item_tahrir|{taom_id}")],
+        [InlineKeyboardButton(text="🗑 O'chirish", callback_data=f"hs_item_ochir|{taom_id}")],
+        [InlineKeyboardButton(text="🔙 Orqaga", callback_data="hs_tahrir")],
+    ])
+
+
+def hisob_savat_matni(user_id: int) -> str:
+    savat = hisob_savat.get(user_id)
+    if not savat or not savat["items"]:
+        return "Savat hozircha bo'sh."
+    qismlar = [f"🧾 <b>{savat['restoran']}</b> — savat\n"]
+    jami = 0
+    for item in savat["items"].values():
+        summa = item["narx"] * item["miqdor"]
+        jami += summa
+        qismlar.append(f"• {item['taom']} — {item['miqdor']} dona × {narxni_formatlash(item['narx'])} = {narxni_formatlash(summa)}")
+    qismlar.append(f"\nOraliq summa: {narxni_formatlash(jami)}")
+    return "\n".join(qismlar)
+
+
+def miqdorni_ayirish(matn: str):
+    """Matnni musbat songa aylantiradi. (muvaffaqiyat, qiymat_yoki_xato_matni)"""
+    matn = matn.strip().replace(",", ".")
+    try:
+        qiymat = float(matn)
+    except ValueError:
+        return False, "Iltimos, faqat son kiriting (masalan: 2 yoki 1.5)."
+    if qiymat <= 0:
+        return False, "Miqdor musbat son bo'lishi kerak."
+    return True, qiymat
+
+
+HISOB_OGOHLANTIRISH = (
+    "\n\n⚠️ <b>Diqqat:</b> Siz barcha ma'lumotlarni to'liq va to'g'ri kiritgan bo'lsangiz ham, "
+    "ushbu summa restoran taqdim etadigan haqiqiy chekdan farq qilishi mumkin — taomlar yoki "
+    "ichimliklar narxi o'zgargan bo'lishi mumkin, yoki siz alohida xona/kabinada o'tirgan "
+    "bo'lsangiz, u yerda xizmat haqi (usluga) boshqacha bo'lishi mumkin. "
+    "Ushbu xizmat sizga faqat <b>taxminiy</b> hisobni hisoblab beradi, xolos."
+)
 
 
 # ===================== MATNLAR =====================
@@ -561,6 +645,129 @@ async def korish_callback(call: CallbackQuery):
     await call.answer()
 
 
+# ===================== TAXMINIY HISOB-KITOB (CALLBACK) =====================
+
+@dp.callback_query(F.data == "hs_ignore")
+async def hs_ignore_callback(call: CallbackQuery):
+    await call.answer()
+
+
+@dp.callback_query(F.data.startswith("hs_add|"))
+async def hs_add_callback(call: CallbackQuery):
+    taom_id = int(call.data.split("|")[1])
+    taom = db.menu_item_by_id(taom_id)
+    user_id = call.from_user.id
+    hisob_miqdor_kutilayotgan[user_id] = {"taom_id": taom_id, "rejim": "qoshish"}
+    user_state[user_id] = "hisob_miqdor_kutilmoqda"
+    await call.message.answer(
+        f"{taom['taom']} — {narxni_formatlash(taom['narx'])}\nNecha dona/miqdor kiritasiz?"
+    )
+    await call.answer()
+
+
+@dp.callback_query(F.data == "hs_tahrir")
+async def hs_tahrir_callback(call: CallbackQuery):
+    user_id = call.from_user.id
+    savat = hisob_savat.get(user_id, {}).get("items", {})
+    if not savat:
+        await call.answer("Savat hozircha bo'sh.", show_alert=True)
+        return
+    await call.message.answer("Qaysi taomni tahrirlamoqchisiz?", reply_markup=hisob_tahrirlash_keyboard(user_id))
+    await call.answer()
+
+
+@dp.callback_query(F.data == "hs_royxatga_qaytish")
+async def hs_royxatga_qaytish_callback(call: CallbackQuery):
+    user_id = call.from_user.id
+    savat = hisob_savat.get(user_id)
+    if not savat:
+        await call.answer()
+        return
+    taomlar = db.get_menu_items(restoran=savat["restoran"])
+    await call.message.answer(
+        hisob_savat_matni(user_id), parse_mode="HTML",
+        reply_markup=hisob_taomlar_keyboard(taomlar)
+    )
+    await call.answer()
+
+
+@dp.callback_query(F.data.startswith("hs_item|"))
+async def hs_item_callback(call: CallbackQuery):
+    taom_id = int(call.data.split("|")[1])
+    user_id = call.from_user.id
+    savat = hisob_savat.get(user_id, {}).get("items", {})
+    item = savat.get(taom_id)
+    if not item:
+        await call.answer("Topilmadi.")
+        return
+    await call.message.answer(
+        f"{item['taom']} — {item['miqdor']} dona\nNima qilamiz?",
+        reply_markup=hisob_item_amal_keyboard(taom_id)
+    )
+    await call.answer()
+
+
+@dp.callback_query(F.data.startswith("hs_item_tahrir|"))
+async def hs_item_tahrir_callback(call: CallbackQuery):
+    taom_id = int(call.data.split("|")[1])
+    user_id = call.from_user.id
+    hisob_miqdor_kutilayotgan[user_id] = {"taom_id": taom_id, "rejim": "tahrirlash"}
+    user_state[user_id] = "hisob_miqdor_kutilmoqda"
+    await call.message.answer("Yangi miqdorni kiriting:")
+    await call.answer()
+
+
+@dp.callback_query(F.data.startswith("hs_item_ochir|"))
+async def hs_item_ochir_callback(call: CallbackQuery):
+    taom_id = int(call.data.split("|")[1])
+    user_id = call.from_user.id
+    savat = hisob_savat.get(user_id, {}).get("items", {})
+    savat.pop(taom_id, None)
+    await call.message.answer("🗑 O'chirildi.\n\n" + hisob_savat_matni(user_id), parse_mode="HTML")
+    if savat:
+        await call.message.answer("Qaysi taomni tahrirlamoqchisiz?", reply_markup=hisob_tahrirlash_keyboard(user_id))
+    await call.answer()
+
+
+@dp.callback_query(F.data == "hs_hisobla")
+async def hs_hisobla_callback(call: CallbackQuery):
+    user_id = call.from_user.id
+    savat = hisob_savat.get(user_id)
+    if not savat or not savat["items"]:
+        await call.answer("Savat hozircha bo'sh.", show_alert=True)
+        return
+
+    restoran = savat["restoran"]
+    info = db.get_restaurant_info(restoran)
+    usluga_foiz = info["usluga_foiz"] or 0
+
+    taomlar_summasi = sum(i["narx"] * i["miqdor"] for i in savat["items"].values())
+    usluga_summasi = taomlar_summasi * usluga_foiz / 100
+    umumiy = taomlar_summasi + usluga_summasi
+
+    qismlar = [f"🧾 <b>{restoran}</b> — taxminiy hisob\n"]
+    for item in savat["items"].values():
+        summa = item["narx"] * item["miqdor"]
+        qismlar.append(f"• {item['taom']} — {item['miqdor']} dona × {narxni_formatlash(item['narx'])} = {narxni_formatlash(summa)}")
+    qismlar.append(f"\nTaomlar summasi: {narxni_formatlash(taomlar_summasi)}")
+    qismlar.append(f"Usluga ({usluga_foiz}%): {narxni_formatlash(usluga_summasi)}")
+    qismlar.append(f"<b>Taxminiy jami: {narxni_formatlash(umumiy)}</b>")
+    qismlar.append(HISOB_OGOHLANTIRISH)
+
+    await call.message.answer("\n".join(qismlar), parse_mode="HTML", reply_markup=asosiy_menu(user_id))
+    await call.answer()
+
+
+@dp.callback_query(F.data == "hs_bekor")
+async def hs_bekor_callback(call: CallbackQuery):
+    user_id = call.from_user.id
+    hisob_savat.pop(user_id, None)
+    hisob_miqdor_kutilayotgan.pop(user_id, None)
+    user_state[user_id] = "main"
+    await call.message.answer("Savat bekor qilindi.", reply_markup=asosiy_menu(user_id))
+    await call.answer()
+
+
 # ===================== ADMIN PANEL (faqat config.ADMIN_IDS uchun) =====================
 
 @dp.callback_query(F.data == "admin|history")
@@ -688,6 +895,13 @@ async def menu_handler(message: types.Message):
             user_state[user_id] = "qidiruv"
             await message.answer("Taom nomini yozing (masalan: shashlik, baliq, chay):", reply_markup=orqaga_menu())
 
+        elif text == "🧮 Taxminiy hisob-kitob":
+            user_state[user_id] = "hisob_restoran_tanlash"
+            await message.answer(
+                "🧮 Taxminiy hisob-kitob\n\nQaysi restoran/ovqatlanish maskani uchun hisoblaymiz?",
+                reply_markup=hisob_restoranlar_menu()
+            )
+
         elif text == "📞 Biz bilan bog'lanish":
             await message.answer(BOGLANISH_TEXT, reply_markup=asosiy_menu(user_id))
 
@@ -768,6 +982,60 @@ async def menu_handler(message: types.Message):
         else:
             markup = restoran_turkumlar_menu(restoran) if restoran else restoranlar_menu()
             await message.answer("Iltimos, quyidagi turkumlardan birini tanlang 👇", reply_markup=markup)
+
+    # ---------- TAXMINIY HISOB: RESTORAN TANLASH ----------
+    elif state == "hisob_restoran_tanlash":
+        if text == "0️⃣ Bekor qilish":
+            hisob_savat.pop(user_id, None)
+            user_state[user_id] = "main"
+            await message.answer("Asosiy menyu:", reply_markup=asosiy_menu(user_id))
+        elif text in db.get_restaurant_names():
+            hisob_savat[user_id] = {"restoran": text, "items": {}}
+            user_state[user_id] = "hisob_faol"
+            taomlar = db.get_menu_items(restoran=text)
+            await message.answer(
+                f"🏠 <b>{text}</b>\nTaomni tanlang (➕ tugmasini bosing):",
+                parse_mode="HTML",
+                reply_markup=hisob_taomlar_keyboard(taomlar)
+            )
+        else:
+            await message.answer("Iltimos, ro'yxatdan restoran tanlang 👇", reply_markup=hisob_restoranlar_menu())
+
+    # ---------- TAXMINIY HISOB: FAOL (inline tugmalar orqali boshqariladi) ----------
+    elif state == "hisob_faol":
+        await message.answer("Iltimos, yuqoridagi ➕ tugmalaridan foydalaning, yoki asosiy menyuga qayting.",
+                              reply_markup=asosiy_menu(user_id))
+
+    # ---------- TAXMINIY HISOB: MIQDOR KUTILMOQDA (qo'shish yoki tahrirlash) ----------
+    elif state == "hisob_miqdor_kutilmoqda":
+        kutilayotgan = hisob_miqdor_kutilayotgan.get(user_id)
+        if not kutilayotgan:
+            user_state[user_id] = "main"
+            await message.answer("Xatolik yuz berdi, qaytadan urinib ko'ring.", reply_markup=asosiy_menu(user_id))
+            return
+        ok, natija = miqdorni_ayirish(text)
+        if not ok:
+            await message.answer(natija)
+            return
+
+        taom_id = kutilayotgan["taom_id"]
+        taom = db.menu_item_by_id(taom_id)
+        savat = hisob_savat.setdefault(user_id, {"restoran": taom["restoran"], "items": {}})
+
+        if kutilayotgan["rejim"] == "tahrirlash":
+            if taom_id in savat["items"]:
+                savat["items"][taom_id]["miqdor"] = natija
+        else:
+            if taom_id in savat["items"]:
+                savat["items"][taom_id]["miqdor"] += natija
+            else:
+                savat["items"][taom_id] = {"taom": taom["taom"], "narx": taom["narx"], "miqdor": natija}
+
+        hisob_miqdor_kutilayotgan.pop(user_id, None)
+        user_state[user_id] = "hisob_faol"
+        taomlar = db.get_menu_items(restoran=savat["restoran"])
+        await message.answer("✅ Qo'shildi!\n\n" + hisob_savat_matni(user_id), parse_mode="HTML")
+        await message.answer("Yana taom qo'shasizmi?", reply_markup=hisob_taomlar_keyboard(taomlar))
 
     # ---------- QIDIRUV MENYUSI ----------
     elif state == "qidiruv":
