@@ -372,7 +372,23 @@ BOGLANISH_TEXT = (
 
 
 # ===================== ASOSIY BUYRUQLAR =====================
+@dp.update.outer_middleware()
+async def kirish_kuzatuvi_middleware(handler, event, data):
+    """Har qanday xabar yoki tugma bosilganda foydalanuvchi faolligini qayd etadi."""
+    user = None
+    if event.message is not None:
+        user = event.message.from_user
+    elif event.callback_query is not None:
+        user = event.callback_query.from_user
 
+    if user is not None:
+        db.track_activity(
+            user.id,
+            username=foydalanuvchi_nomi(user),
+            full_name=user.full_name,
+        )
+
+    return await handler(event, data)
 @dp.message(Command("start"))
 async def cmd_start(message: types.Message):
     user_state[message.from_user.id] = "main"
