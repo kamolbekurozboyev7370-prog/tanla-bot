@@ -47,6 +47,7 @@ class Restaurant(Base):
     manzil = Column(String, nullable=True)
     usluga_foiz = Column(Integer, nullable=True)
     xarita_havolasi = Column(String, nullable=True)  # Google Maps'dagi aniq joylashuv havolasi
+    owner_telegram_id = Column(String, nullable=True)  # shu Telegram ID'ga ega odam menyuni o'zi tahrirlay oladi
 
     menu_items = relationship("MenuItem", back_populates="restoran", cascade="all, delete-orphan")
 
@@ -154,6 +155,9 @@ def _migrate_yangi_ustunlar():
         if "xarita_havolasi" not in mavjud_ustunlar:
             conn.exec_driver_sql("ALTER TABLE restaurants ADD COLUMN xarita_havolasi VARCHAR")
             conn.commit()
+        if "owner_telegram_id" not in mavjud_ustunlar:
+            conn.exec_driver_sql("ALTER TABLE restaurants ADD COLUMN owner_telegram_id VARCHAR")
+            conn.commit()
 
 
 def sync_restaurant_info():
@@ -224,8 +228,93 @@ def get_restaurant_info(restoran: str) -> dict:
     with SessionLocal() as db:
         r = db.query(Restaurant).filter(Restaurant.name == restoran).first()
         if not r:
-            return {"manzil": None, "usluga_foiz": None, "xarita_havolasi": None}
-        return {"manzil": r.manzil, "usluga_foiz": r.usluga_foiz, "xarita_havolasi": r.xarita_havolasi}
+            return {"manzil": None, "usluga_foiz": None, "xarita_havolasi": None, "owner_telegram_id": None}
+        return {
+            "manzil": r.manzil,
+            "usluga_foiz": r.usluga_foiz,
+            "xarita_havolasi": r.xarita_havolasi,
+            "owner_telegram_id": r.owner_telegram_id,
+        }
+
+
+# ----- Restoran egalari (restoran-panel) -----
+
+def set_restaurant_owner(restoran: str, telegram_id) -> bool:
+    """Restoranga egasini (Telegram ID) biriktiradi. Faqat admin chaqirishi kerak."""
+    with SessionLocal() as db:
+        r = db.query(Restaurant).filter(Restaurant.name == restoran).first()
+        if not r:
+            return False
+        r.owner_telegram_id = str(telegram_id)
+        db.commit()
+        return True
+
+
+def remove_restaurant_owner(restoran: str) -> bool:
+    with SessionLocal() as db:
+        r = db.query(Restaurant).filter(Restaurant.name == restoran).first()
+        if not r:
+            return False
+        r.owner_telegram_id = None
+        db.commit()
+        return True
+
+
+def get_all_restaurants() -> list:
+    """Admin panelida restoran egalarini boshqarish uchun - id, nom va egasi biriktirilgan holda."""
+    with SessionLocal() as db:
+        rows = db.query(Restaurant).order_by(Restaurant.id).all()
+        return [{"id": r.id, "name": r.name, "owner_telegram_id": r.owner_telegram_id} for r in rows]
+
+
+def get_restaurant_name_by_id(restaurant_id: int) -> str:
+    with SessionLocal() as db:
+        r = db.get(Restaurant, restaurant_id)
+        return r.name if r else None
+
+
+def get_restaurant_by_owner(telegram_id) -> dict:
+    """Shu Telegram ID qaysi restoranga ega bo'lsa, o'sha restoran nomini qaytaradi. Aks holda None."""
+    with SessionLocal() as db:
+        r = db.query(Restaurant).filter(Restaurant.owner_telegram_id == str(telegram_id)).first()
+        if not r:
+            return None
+        return {"name": r.name, "manzil": r.manzil, "usluga_foiz": r.usluga_foiz}
+
+
+# ----- Menyuni tahrirlash (restoran-panel) -----
+
+def add_menu_item(restoran: str, turkum: str, taom: str, narx: int) -> dict:
+    with SessionLocal() as db:
+        r = db.query(Restaurant).filter(Restaurant.name == restoran).first()
+        if not r:
+            return None
+        mi = MenuItem(restaurant_id=r.id, turkum=turkum.strip(), taom=taom.strip(), narx=narx)
+        db.add(mi)
+        db.commit()
+        db.refresh(mi)
+        return _mi_to_dict(mi)
+
+
+def update_menu_item_narx(item_id: int, yangi_narx: int) -> dict:
+    with SessionLocal() as db:
+        mi = db.get(MenuItem, item_id)
+        if not mi:
+            return None
+        mi.narx = yangi_narx
+        db.commit()
+        db.refresh(mi)
+        return _mi_to_dict(mi)
+
+
+def delete_menu_item(item_id: int) -> bool:
+    with SessionLocal() as db:
+        mi = db.get(MenuItem, item_id)
+        if not mi:
+            return False
+        db.delete(mi)
+        db.commit()
+        return True
 
 
 def get_categories() -> list:

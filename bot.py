@@ -31,6 +31,9 @@ pending_review = {}          # user_id -> to'ldirilayotgan izoh ma'lumotlari
 hisob_savat = {}              # user_id -> {"restoran": str, "items": {taom_id: {"taom","narx","miqdor"}}}
 hisob_miqdor_kutilayotgan = {}  # user_id -> {"taom_id": int, "rejim": "qoshish" | "tahrirlash"}
 
+owner_new_item = {}          # user_id -> {"turkum": str, "taom": str} - yangi taom qo'shish jarayonida
+admin_owner_assign = {}      # user_id -> {"restoran": str} - admin restoran egasini tayinlash jarayonida
+
 
 # ===================== YORDAMCHI FUNKSIYALAR =====================
 
@@ -129,6 +132,38 @@ def admin_panel_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="🕘 Obunachilar tarixi (kirdi/chiqdi)", callback_data="admin|history")],
         [InlineKeyboardButton(text="📊 Kundalik foydalanish", callback_data="admin|activity")],
         [InlineKeyboardButton(text="📈 Yangi foydalanuvchilar", callback_data="admin|newusers")],
+        [InlineKeyboardButton(text="🏪 Restoran egalarini boshqarish", callback_data="admin|owners")],
+    ])
+
+
+# ----- Restoran-panel (restoran egasi uchun) -----
+
+def owner_panel_keyboard() -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="➕ Yangi taom qo'shish", callback_data="owner|add")],
+        [InlineKeyboardButton(text="✏️ Narxni tahrirlash", callback_data="owner|editlist")],
+        [InlineKeyboardButton(text="🗑 Taomni o'chirish", callback_data="owner|dellist")],
+    ])
+
+
+def owner_taomlar_keyboard(restoran: str, prefix: str) -> InlineKeyboardMarkup:
+    """prefix: 'owner_edit' yoki 'owner_del' - qaysi amal uchun ro'yxat ekanini belgilaydi."""
+    taomlar = db.get_menu_items(restoran=restoran)
+    qatorlar = [
+        [InlineKeyboardButton(
+            text=f"{item['taom']} — {narxni_formatlash(item['narx'])}",
+            callback_data=f"{prefix}|{item['id']}",
+        )]
+        for item in taomlar
+    ]
+    qatorlar.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="owner|panel")])
+    return InlineKeyboardMarkup(inline_keyboard=qatorlar)
+
+
+def owner_delete_tasdiq_keyboard(taom_id: int) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Ha, o'chirish", callback_data=f"owner_del_ok|{taom_id}")],
+        [InlineKeyboardButton(text="❌ Bekor qilish", callback_data="owner|panel")],
     ])
 
 
@@ -235,6 +270,11 @@ def is_admin(user_id: int) -> bool:
     return user_id in config.ADMIN_IDS
 
 
+def egasi_bolgan_restoran(user_id: int):
+    """Foydalanuvchi biror restoranga ega bo'lsa, o'sha restoran ma'lumotini qaytaradi, aks holda None."""
+    return db.get_restaurant_by_owner(user_id)
+
+
 def asosiy_menu(user_id: int = None) -> ReplyKeyboardMarkup:
     keyboard = [
         [KeyboardButton(text="⭐️ Restoranlar reytingi"), KeyboardButton(text="🍽 Taomlar reytingi")],
@@ -244,6 +284,8 @@ def asosiy_menu(user_id: int = None) -> ReplyKeyboardMarkup:
     ]
     if config.WEBAPP_URL:
         keyboard.append([KeyboardButton(text="🌐 Ilovada ochish", web_app=WebAppInfo(url=config.WEBAPP_URL))])
+    if user_id is not None and egasi_bolgan_restoran(user_id):
+        keyboard.append([KeyboardButton(text="🏪 Mening restoranim")])
     if user_id is not None and is_admin(user_id):
         keyboard.append([KeyboardButton(text="🔐 Admin panel")])
     return ReplyKeyboardMarkup(keyboard=keyboard, resize_keyboard=True)
@@ -879,6 +921,188 @@ async def newusers_filter_callback(call: CallbackQuery):
     await call.answer()
 
 
+# ===================== ADMIN: RESTORAN EGALARINI BOSHQARISH (CALLBACK) =====================
+
+@dp.callback_query(F.data == "admin|owners")
+async def admin_owners_callback(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        await call.answer("Bu bo'lim faqat administrator uchun.", show_alert=True)
+        return
+    restoranlar = db.get_all_restaurants()
+    qatorlar = []
+    for r in restoranlar:
+        belgi = "✅" if r["owner_telegram_id"] else "➖"
+        qatorlar.append([InlineKeyboardButton(
+            text=f"{belgi} {r['name']}", callback_data=f"admin_owner_pick|{r['id']}"
+        )])
+    await call.message.answer(
+        "🏪 <b>Restoran egalarini boshqarish</b>\n\n✅ — egasi tayinlangan, ➖ — hali yo'q.\nRestoranni tanlang:",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=qatorlar),
+    )
+    await call.answer()
+
+
+@dp.callback_query(F.data.startswith("admin_owner_pick|"))
+async def admin_owner_pick_callback(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        await call.answer("Bu bo'lim faqat administrator uchun.", show_alert=True)
+        return
+    restoran_id = int(call.data.split("|")[1])
+    nom = db.get_restaurant_name_by_id(restoran_id)
+    info = db.get_restaurant_info(nom)
+    egasi = f"👤 Hozirgi egasi: <code>{info['owner_telegram_id']}</code>" if info["owner_telegram_id"] else "👤 Hozircha egasi tayinlanmagan."
+    qatorlar = [[InlineKeyboardButton(text="✏️ Egasini tayinlash/almashtirish", callback_data=f"admin_owner_set|{restoran_id}")]]
+    if info["owner_telegram_id"]:
+        qatorlar.append([InlineKeyboardButton(text="🗑 Egasini olib tashlash", callback_data=f"admin_owner_unset|{restoran_id}")])
+    await call.message.answer(f"🏪 <b>{nom}</b>\n{egasi}", parse_mode="HTML", reply_markup=InlineKeyboardMarkup(inline_keyboard=qatorlar))
+    await call.answer()
+
+
+@dp.callback_query(F.data.startswith("admin_owner_set|"))
+async def admin_owner_set_callback(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        await call.answer("Bu bo'lim faqat administrator uchun.", show_alert=True)
+        return
+    restoran_id = int(call.data.split("|")[1])
+    nom = db.get_restaurant_name_by_id(restoran_id)
+    admin_owner_assign[call.from_user.id] = {"restoran": nom}
+    user_state[call.from_user.id] = "admin_owner_id_kutilmoqda"
+    await call.message.answer(
+        f"🏪 <b>{nom}</b> uchun egasining Telegram ID raqamini yuboring.\n\n"
+        f"(Egasi bo'lajak odam avval botga /start bosgan bo'lishi kerak. "
+        f"Uning ID raqamini @userinfobot orqali bilib olishingiz mumkin.)",
+        parse_mode="HTML",
+        reply_markup=orqaga_menu(),
+    )
+    await call.answer()
+
+
+@dp.callback_query(F.data.startswith("admin_owner_unset|"))
+async def admin_owner_unset_callback(call: CallbackQuery):
+    if not is_admin(call.from_user.id):
+        await call.answer("Bu bo'lim faqat administrator uchun.", show_alert=True)
+        return
+    restoran_id = int(call.data.split("|")[1])
+    nom = db.get_restaurant_name_by_id(restoran_id)
+    db.remove_restaurant_owner(nom)
+    await call.message.answer(f"🗑 <b>{nom}</b> egasi olib tashlandi.", parse_mode="HTML")
+    await call.answer()
+
+
+# ===================== RESTORAN-PANEL (restoran egasi uchun, CALLBACK) =====================
+
+@dp.callback_query(F.data == "owner|panel")
+async def owner_panel_callback(call: CallbackQuery):
+    restoran = egasi_bolgan_restoran(call.from_user.id)
+    if not restoran:
+        await call.answer("Siz hech qanday restoranga ega emassiz.", show_alert=True)
+        return
+    await call.message.answer(
+        f"🏪 <b>{restoran['name']}</b> — restoran panelingiz\n\nQuyidagilardan birini tanlang:",
+        parse_mode="HTML",
+        reply_markup=owner_panel_keyboard(),
+    )
+    await call.answer()
+
+
+@dp.callback_query(F.data == "owner|add")
+async def owner_add_callback(call: CallbackQuery):
+    restoran = egasi_bolgan_restoran(call.from_user.id)
+    if not restoran:
+        await call.answer("Siz hech qanday restoranga ega emassiz.", show_alert=True)
+        return
+    owner_new_item[call.from_user.id] = {}
+    user_state[call.from_user.id] = "owner_taom_turkum_kutilmoqda"
+    await call.message.answer(
+        "➕ Yangi taom qo'shish\n\n1-qadam: taom qaysi turkumga tegishli? (masalan: Salatlar, Issiq taomlar, Ichimliklar)",
+        reply_markup=orqaga_menu(),
+    )
+    await call.answer()
+
+
+@dp.callback_query(F.data == "owner|editlist")
+async def owner_editlist_callback(call: CallbackQuery):
+    restoran = egasi_bolgan_restoran(call.from_user.id)
+    if not restoran:
+        await call.answer("Siz hech qanday restoranga ega emassiz.", show_alert=True)
+        return
+    await call.message.answer(
+        "✏️ Narxini o'zgartirmoqchi bo'lgan taomni tanlang:",
+        reply_markup=owner_taomlar_keyboard(restoran["name"], "owner_edit"),
+    )
+    await call.answer()
+
+
+@dp.callback_query(F.data == "owner|dellist")
+async def owner_dellist_callback(call: CallbackQuery):
+    restoran = egasi_bolgan_restoran(call.from_user.id)
+    if not restoran:
+        await call.answer("Siz hech qanday restoranga ega emassiz.", show_alert=True)
+        return
+    await call.message.answer(
+        "🗑 O'chirmoqchi bo'lgan taomni tanlang:",
+        reply_markup=owner_taomlar_keyboard(restoran["name"], "owner_del"),
+    )
+    await call.answer()
+
+
+@dp.callback_query(F.data.startswith("owner_edit|"))
+async def owner_edit_callback(call: CallbackQuery):
+    restoran = egasi_bolgan_restoran(call.from_user.id)
+    if not restoran:
+        await call.answer("Siz hech qanday restoranga ega emassiz.", show_alert=True)
+        return
+    taom_id = int(call.data.split("|")[1])
+    item = db.menu_item_by_id(taom_id)
+    if not item or item["restoran"] != restoran["name"]:
+        await call.answer("Bu taom sizning restoraningizga tegishli emas.", show_alert=True)
+        return
+    owner_new_item[call.from_user.id] = {"taom_id": taom_id}
+    user_state[call.from_user.id] = "owner_narx_tahrir_kutilmoqda"
+    await call.message.answer(
+        f"✏️ <b>{item['taom']}</b>\nHozirgi narx: {narxni_formatlash(item['narx'])}\n\nYangi narxni faqat raqam bilan yuboring (masalan: 35000):",
+        parse_mode="HTML",
+        reply_markup=orqaga_menu(),
+    )
+    await call.answer()
+
+
+@dp.callback_query(F.data.startswith("owner_del|"))
+async def owner_del_callback(call: CallbackQuery):
+    restoran = egasi_bolgan_restoran(call.from_user.id)
+    if not restoran:
+        await call.answer("Siz hech qanday restoranga ega emassiz.", show_alert=True)
+        return
+    taom_id = int(call.data.split("|")[1])
+    item = db.menu_item_by_id(taom_id)
+    if not item or item["restoran"] != restoran["name"]:
+        await call.answer("Bu taom sizning restoraningizga tegishli emas.", show_alert=True)
+        return
+    await call.message.answer(
+        f"🗑 <b>{item['taom']}</b> ({narxni_formatlash(item['narx'])}) rostdan ham o'chirilsinmi?",
+        parse_mode="HTML",
+        reply_markup=owner_delete_tasdiq_keyboard(taom_id),
+    )
+    await call.answer()
+
+
+@dp.callback_query(F.data.startswith("owner_del_ok|"))
+async def owner_del_ok_callback(call: CallbackQuery):
+    restoran = egasi_bolgan_restoran(call.from_user.id)
+    if not restoran:
+        await call.answer("Siz hech qanday restoranga ega emassiz.", show_alert=True)
+        return
+    taom_id = int(call.data.split("|")[1])
+    item = db.menu_item_by_id(taom_id)
+    if not item or item["restoran"] != restoran["name"]:
+        await call.answer("Bu taom sizning restoraningizga tegishli emas.", show_alert=True)
+        return
+    db.delete_menu_item(taom_id)
+    await call.message.answer(f"🗑 <b>{item['taom']}</b> menyudan o'chirildi.", parse_mode="HTML")
+    await call.answer()
+
+
 # ===================== ASOSIY MATNLI MENYU =====================
 
 @dp.message()
@@ -960,6 +1184,17 @@ async def menu_handler(message: types.Message):
 
         elif text == "🌐 Ilovada ochish":
             pass  # web_app tugmasi Telegram tomonidan avtomatik ochiladi
+
+        elif text == "🏪 Mening restoranim":
+            restoran = egasi_bolgan_restoran(user_id)
+            if not restoran:
+                await message.answer("Siz hozircha hech qanday restoranga ega emassiz.", reply_markup=asosiy_menu(user_id))
+            else:
+                await message.answer(
+                    f"🏪 <b>{restoran['name']}</b> — restoran panelingiz\n\nQuyidagilardan birini tanlang:",
+                    parse_mode="HTML",
+                    reply_markup=owner_panel_keyboard(),
+                )
 
         elif text == "🔐 Admin panel":
             if not is_admin(user_id):
@@ -1148,6 +1383,103 @@ async def menu_handler(message: types.Message):
     # ---------- IZOH: TASDIQ KUTILMOQDA ----------
     elif state == "izoh_tasdiq_kutilmoqda":
         await message.answer("Iltimos, yuqoridagi «✅ Saqlash» yoki «❌ Bekor qilish» tugmasini bosing.")
+
+    # ---------- RESTORAN-PANEL: YANGI TAOM - TURKUM KUTILMOQDA ----------
+    elif state == "owner_taom_turkum_kutilmoqda":
+        if text == "0️⃣ Orqaga":
+            owner_new_item.pop(user_id, None)
+            user_state[user_id] = "main"
+            await message.answer("Bekor qilindi.", reply_markup=asosiy_menu(user_id))
+        elif len(text.strip()) < 2:
+            await message.answer("Iltimos, turkum nomini kiriting (masalan: Salatlar).")
+        else:
+            owner_new_item.setdefault(user_id, {})["turkum"] = text.strip()
+            user_state[user_id] = "owner_taom_nomi_kutilmoqda"
+            await message.answer("2-qadam: taomning nomini yozing (masalan: Norin):", reply_markup=orqaga_menu())
+
+    # ---------- RESTORAN-PANEL: YANGI TAOM - NOMI KUTILMOQDA ----------
+    elif state == "owner_taom_nomi_kutilmoqda":
+        if text == "0️⃣ Orqaga":
+            owner_new_item.pop(user_id, None)
+            user_state[user_id] = "main"
+            await message.answer("Bekor qilindi.", reply_markup=asosiy_menu(user_id))
+        elif len(text.strip()) < 2:
+            await message.answer("Iltimos, taom nomini kiriting.")
+        else:
+            owner_new_item.setdefault(user_id, {})["taom"] = text.strip()
+            user_state[user_id] = "owner_taom_narx_kutilmoqda"
+            await message.answer("3-qadam: narxini faqat raqam bilan yozing (masalan: 28000):", reply_markup=orqaga_menu())
+
+    # ---------- RESTORAN-PANEL: YANGI TAOM - NARX KUTILMOQDA ----------
+    elif state == "owner_taom_narx_kutilmoqda":
+        if text == "0️⃣ Orqaga":
+            owner_new_item.pop(user_id, None)
+            user_state[user_id] = "main"
+            await message.answer("Bekor qilindi.", reply_markup=asosiy_menu(user_id))
+        elif not text.strip().isdigit():
+            await message.answer("Iltimos, narxni faqat raqam bilan kiriting (masalan: 28000).")
+        else:
+            restoran = egasi_bolgan_restoran(user_id)
+            malumot = owner_new_item.pop(user_id, {})
+            if not restoran or "turkum" not in malumot or "taom" not in malumot:
+                user_state[user_id] = "main"
+                await message.answer("Xatolik yuz berdi, qaytadan urinib ko'ring.", reply_markup=asosiy_menu(user_id))
+            else:
+                yangi = db.add_menu_item(restoran["name"], malumot["turkum"], malumot["taom"], int(text.strip()))
+                user_state[user_id] = "main"
+                await message.answer(
+                    f"✅ Qo'shildi:\n🍽 <b>{yangi['taom']}</b> ({yangi['turkum']}) — {narxni_formatlash(yangi['narx'])}",
+                    parse_mode="HTML",
+                    reply_markup=asosiy_menu(user_id),
+                )
+
+    # ---------- RESTORAN-PANEL: NARXNI TAHRIRLASH ----------
+    elif state == "owner_narx_tahrir_kutilmoqda":
+        if text == "0️⃣ Orqaga":
+            owner_new_item.pop(user_id, None)
+            user_state[user_id] = "main"
+            await message.answer("Bekor qilindi.", reply_markup=asosiy_menu(user_id))
+        elif not text.strip().isdigit():
+            await message.answer("Iltimos, narxni faqat raqam bilan kiriting (masalan: 35000).")
+        else:
+            restoran = egasi_bolgan_restoran(user_id)
+            malumot = owner_new_item.pop(user_id, {})
+            taom_id = malumot.get("taom_id")
+            item = db.menu_item_by_id(taom_id) if taom_id else None
+            if not restoran or not item or item["restoran"] != restoran["name"]:
+                user_state[user_id] = "main"
+                await message.answer("Xatolik yuz berdi, qaytadan urinib ko'ring.", reply_markup=asosiy_menu(user_id))
+            else:
+                yangilangan = db.update_menu_item_narx(taom_id, int(text.strip()))
+                user_state[user_id] = "main"
+                await message.answer(
+                    f"✅ Yangilandi:\n🍽 <b>{yangilangan['taom']}</b> — {narxni_formatlash(yangilangan['narx'])}",
+                    parse_mode="HTML",
+                    reply_markup=asosiy_menu(user_id),
+                )
+
+    # ---------- ADMIN: RESTORAN EGASINING TELEGRAM ID'SI KUTILMOQDA ----------
+    elif state == "admin_owner_id_kutilmoqda":
+        if text == "0️⃣ Orqaga":
+            admin_owner_assign.pop(user_id, None)
+            user_state[user_id] = "main"
+            await message.answer("Bekor qilindi.", reply_markup=asosiy_menu(user_id))
+        elif not text.strip().isdigit():
+            await message.answer("Iltimos, faqat Telegram ID raqamini kiriting (masalan: 340525338).")
+        else:
+            malumot = admin_owner_assign.pop(user_id, {})
+            restoran = malumot.get("restoran")
+            if not restoran:
+                user_state[user_id] = "main"
+                await message.answer("Xatolik yuz berdi, qaytadan urinib ko'ring.", reply_markup=asosiy_menu(user_id))
+            else:
+                db.set_restaurant_owner(restoran, text.strip())
+                user_state[user_id] = "main"
+                await message.answer(
+                    f"✅ <b>{restoran}</b> uchun egasi tayinlandi: <code>{text.strip()}</code>",
+                    parse_mode="HTML",
+                    reply_markup=asosiy_menu(user_id),
+                )
 
     else:
         user_state[user_id] = "main"
