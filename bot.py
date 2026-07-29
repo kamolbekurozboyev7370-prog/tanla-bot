@@ -142,6 +142,7 @@ def owner_panel_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="➕ Yangi taom qo'shish", callback_data="owner|add")],
         [InlineKeyboardButton(text="✏️ Narxni tahrirlash", callback_data="owner|editlist")],
+        [InlineKeyboardButton(text="🔀 Turkumini o'zgartirish", callback_data="owner|turkumlist")],
         [InlineKeyboardButton(text="🗑 Taomni o'chirish", callback_data="owner|dellist")],
     ])
 
@@ -165,6 +166,17 @@ def owner_delete_tasdiq_keyboard(taom_id: int) -> InlineKeyboardMarkup:
         [InlineKeyboardButton(text="✅ Ha, o'chirish", callback_data=f"owner_del_ok|{taom_id}")],
         [InlineKeyboardButton(text="❌ Bekor qilish", callback_data="owner|panel")],
     ])
+
+
+def owner_turkum_tanlash_keyboard(taom_id: int, mavjud_turkumlar: list) -> InlineKeyboardMarkup:
+    """Mavjud turkumlarni tugma qilib ko'rsatadi (index orqali), plus yangi turkum kiritish tugmasi."""
+    qatorlar = [
+        [InlineKeyboardButton(text=turkum, callback_data=f"owner_turkum_pick|{taom_id}|{i}")]
+        for i, turkum in enumerate(mavjud_turkumlar)
+    ]
+    qatorlar.append([InlineKeyboardButton(text="➕ Yangi turkum kiritish", callback_data=f"owner_turkum_new|{taom_id}")])
+    qatorlar.append([InlineKeyboardButton(text="🔙 Orqaga", callback_data="owner|panel")])
+    return InlineKeyboardMarkup(inline_keyboard=qatorlar)
 
 
 def newusers_filter_keyboard() -> InlineKeyboardMarkup:
@@ -1047,6 +1059,89 @@ async def owner_dellist_callback(call: CallbackQuery):
     await call.answer()
 
 
+@dp.callback_query(F.data == "owner|turkumlist")
+async def owner_turkumlist_callback(call: CallbackQuery):
+    restoran = egasi_bolgan_restoran(call.from_user.id)
+    if not restoran:
+        await call.answer("Siz hech qanday restoranga ega emassiz.", show_alert=True)
+        return
+    await call.message.answer(
+        "🔀 Turkumini o'zgartirmoqchi bo'lgan taomni tanlang:",
+        reply_markup=owner_taomlar_keyboard(restoran["name"], "owner_turkum"),
+    )
+    await call.answer()
+
+
+@dp.callback_query(F.data.startswith("owner_turkum|"))
+async def owner_turkum_callback(call: CallbackQuery):
+    restoran = egasi_bolgan_restoran(call.from_user.id)
+    if not restoran:
+        await call.answer("Siz hech qanday restoranga ega emassiz.", show_alert=True)
+        return
+    taom_id = int(call.data.split("|")[1])
+    item = db.menu_item_by_id(taom_id)
+    if not item or item["restoran"] != restoran["name"]:
+        await call.answer("Bu taom sizning restoraningizga tegishli emas.", show_alert=True)
+        return
+    mavjud_turkumlar = db.get_restaurant_categories(restoran["name"])
+    owner_new_item[call.from_user.id] = {"taom_id": taom_id, "turkum_options": mavjud_turkumlar}
+    await call.message.answer(
+        f"🔀 <b>{item['taom']}</b>\nHozirgi turkum: {item['turkum']}\n\n"
+        f"Yangi turkumni tanlang, yoki yangisini kiriting:",
+        parse_mode="HTML",
+        reply_markup=owner_turkum_tanlash_keyboard(taom_id, mavjud_turkumlar),
+    )
+    await call.answer()
+
+
+@dp.callback_query(F.data.startswith("owner_turkum_pick|"))
+async def owner_turkum_pick_callback(call: CallbackQuery):
+    restoran = egasi_bolgan_restoran(call.from_user.id)
+    if not restoran:
+        await call.answer("Siz hech qanday restoranga ega emassiz.", show_alert=True)
+        return
+    _, taom_id_str, index_str = call.data.split("|")
+    taom_id = int(taom_id_str)
+    item = db.menu_item_by_id(taom_id)
+    if not item or item["restoran"] != restoran["name"]:
+        await call.answer("Bu taom sizning restoraningizga tegishli emas.", show_alert=True)
+        return
+    malumot = owner_new_item.get(call.from_user.id, {})
+    options = malumot.get("turkum_options", [])
+    index = int(index_str)
+    if malumot.get("taom_id") != taom_id or index >= len(options):
+        await call.answer("Bu tanlov eskirgan, qaytadan urinib ko'ring.", show_alert=True)
+        return
+    yangilangan = db.update_menu_item_turkum(taom_id, options[index])
+    owner_new_item.pop(call.from_user.id, None)
+    await call.message.answer(
+        f"✅ <b>{yangilangan['taom']}</b> endi «{yangilangan['turkum']}» turkumida.",
+        parse_mode="HTML",
+    )
+    await call.answer()
+
+
+@dp.callback_query(F.data.startswith("owner_turkum_new|"))
+async def owner_turkum_new_callback(call: CallbackQuery):
+    restoran = egasi_bolgan_restoran(call.from_user.id)
+    if not restoran:
+        await call.answer("Siz hech qanday restoranga ega emassiz.", show_alert=True)
+        return
+    taom_id = int(call.data.split("|")[1])
+    item = db.menu_item_by_id(taom_id)
+    if not item or item["restoran"] != restoran["name"]:
+        await call.answer("Bu taom sizning restoraningizga tegishli emas.", show_alert=True)
+        return
+    owner_new_item[call.from_user.id] = {"taom_id": taom_id}
+    user_state[call.from_user.id] = "owner_turkum_yangi_kutilmoqda"
+    await call.message.answer(
+        f"🔀 <b>{item['taom']}</b> uchun yangi turkum nomini yozing (masalan: Milliy taomlar):",
+        parse_mode="HTML",
+        reply_markup=orqaga_menu(),
+    )
+    await call.answer()
+
+
 @dp.callback_query(F.data.startswith("owner_edit|"))
 async def owner_edit_callback(call: CallbackQuery):
     restoran = egasi_bolgan_restoran(call.from_user.id)
@@ -1429,6 +1524,31 @@ async def menu_handler(message: types.Message):
                 user_state[user_id] = "main"
                 await message.answer(
                     f"✅ Qo'shildi:\n🍽 <b>{yangi['taom']}</b> ({yangi['turkum']}) — {narxni_formatlash(yangi['narx'])}",
+                    parse_mode="HTML",
+                    reply_markup=asosiy_menu(user_id),
+                )
+
+    # ---------- RESTORAN-PANEL: YANGI TURKUM NOMI KUTILMOQDA ----------
+    elif state == "owner_turkum_yangi_kutilmoqda":
+        if text == "0️⃣ Orqaga":
+            owner_new_item.pop(user_id, None)
+            user_state[user_id] = "main"
+            await message.answer("Bekor qilindi.", reply_markup=asosiy_menu(user_id))
+        elif len(text.strip()) < 2:
+            await message.answer("Iltimos, turkum nomini kiriting (masalan: Milliy taomlar).")
+        else:
+            restoran = egasi_bolgan_restoran(user_id)
+            malumot = owner_new_item.pop(user_id, {})
+            taom_id = malumot.get("taom_id")
+            item = db.menu_item_by_id(taom_id) if taom_id else None
+            if not restoran or not item or item["restoran"] != restoran["name"]:
+                user_state[user_id] = "main"
+                await message.answer("Xatolik yuz berdi, qaytadan urinib ko'ring.", reply_markup=asosiy_menu(user_id))
+            else:
+                yangilangan = db.update_menu_item_turkum(taom_id, text.strip())
+                user_state[user_id] = "main"
+                await message.answer(
+                    f"✅ <b>{yangilangan['taom']}</b> endi «{yangilangan['turkum']}» turkumida.",
                     parse_mode="HTML",
                     reply_markup=asosiy_menu(user_id),
                 )

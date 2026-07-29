@@ -307,6 +307,17 @@ def update_menu_item_narx(item_id: int, yangi_narx: int) -> dict:
         return _mi_to_dict(mi)
 
 
+def update_menu_item_turkum(item_id: int, yangi_turkum: str) -> dict:
+    with SessionLocal() as db:
+        mi = db.get(MenuItem, item_id)
+        if not mi:
+            return None
+        mi.turkum = yangi_turkum.strip()
+        db.commit()
+        db.refresh(mi)
+        return _mi_to_dict(mi)
+
+
 def delete_menu_item(item_id: int) -> bool:
     with SessionLocal() as db:
         mi = db.get(MenuItem, item_id)
